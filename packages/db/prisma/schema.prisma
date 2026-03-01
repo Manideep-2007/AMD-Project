@@ -1,0 +1,392 @@
+// Prisma schema for NexusOps — AI Autonomy & Governance Platform
+// Database: PostgreSQL 16 with TimescaleDB extension
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "metrics"]
+}
+
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DATABASE_URL_DIRECT")
+}
+
+// ================================
+// CORE DOMAIN MODELS
+// ================================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum TaskStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  ESCALATED
+  CANCELLED
+}
+
+enum AgentStatus {
+  IDLE
+  ACTIVE
+  STALLED
+  ZOMBIE
+  TERMINATED
+}
+
+enum PolicyAction {
+  ALLOW
+  DENY
+  ESCALATE_TO_HUMAN
+}
+
+enum ToolType {
+  GITHUB
+  JIRA
+  CLOUD_DEPLOY
+  DATABASE
+  CUSTOM
+}
+
+enum Environment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+enum DataClassification {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+// ================================
+// MULTI-TENANCY & AUTH
+// ================================
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users       WorkspaceUser[]
+  agents      Agent[]
+  tasks       Task[]
+  policies    PolicyRule[]
+  toolCalls   ToolCall[]
+  auditEvents AuditEvent[]
+  budgets     Budget[]
+  apiKeys     ApiKey[]
+
+  @@index([slug])
+  @@map("workspaces")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  avatarUrl     String?
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  workspaces    WorkspaceUser[]
+  refreshTokens RefreshToken[]
+  auditEvents   AuditEvent[]
+  taskApprovals TaskApproval[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model WorkspaceUser {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        UserRole @default(VIEWER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_users")
+}
+
+model RefreshToken {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+  replacedBy   String?
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  keyHash     String   @unique // SHA-256 hash
+  keyPrefix   String   // First 8 chars for UI display
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+// ================================
+// AGENT & TASK MANAGEMENT
+// ================================
+
+model Agent {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String?
+  version         String
+  status          AgentStatus @default(IDLE)
+  config          Json        // Agent-specific config
+  toolPermissions String[]    // Allowlist of tool types
+  maxTokens       Int?
+  maxCostUsd      Float?
+  maxExecutionMs  Int?
+  maxDepth        Int         @default(10)
+  heartbeatAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  terminatedAt    DateTime?
+
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks           Task[]
+  toolCalls       ToolCall[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("agents")
+}
+
+model Task {
+  id              String     @id @default(cuid())
+  workspaceId     String
+  agentId         String
+  name            String
+  description     String?
+  status          TaskStatus @default(PENDING)
+  traceId         String     @unique  // OpenTelemetry trace ID
+  input           Json
+  output          Json?
+  error           Json?
+  tokenCount      Int        @default(0)
+  costUsd         Float      @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent           Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  toolCalls       ToolCall[]
+  approvals       TaskApproval[]
+  policyEvals     PolicyEvaluation[]
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([traceId])
+  @@map("tasks")
+}
+
+model TaskApproval {
+  id          String   @id @default(cuid())
+  taskId      String
+  userId      String
+  approved    Boolean
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_approvals")
+}
+
+// ================================
+// TOOL PROXY LAYER
+// ================================
+
+model ToolCall {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  taskId          String
+  agentId         String
+  toolType        ToolType
+  toolMethod      String    // e.g., "github.createPR", "jira.createIssue"
+  input           Json
+  output          Json?
+  error           Json?
+  blocked         Boolean   @default(false)
+  blockReason     String?
+  durationMs      Int?
+  createdAt       DateTime  @default(now())
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([taskId])
+  @@index([agentId])
+  @@index([toolType])
+  @@index([createdAt])
+  @@map("tool_calls")
+}
+
+// ================================
+// POLICY ENGINE
+// ================================
+
+model PolicyRule {
+  id                  String              @id @default(cuid())
+  workspaceId         String
+  name                String
+  description         String?
+  enabled             Boolean             @default(true)
+  version             Int                 @default(1)
+  action              PolicyAction
+  priority            Int                 @default(0)  // Higher = evaluated first
+  conditions          Json                // Policy conditions
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  createdBy           String?
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  evaluations         PolicyEvaluation[]
+
+  @@index([workspaceId])
+  @@index([enabled])
+  @@index([priority])
+  @@map("policy_rules")
+}
+
+model PolicyEvaluation {
+  id              String        @id @default(cuid())
+  policyRuleId    String
+  taskId          String
+  matched         Boolean
+  action          PolicyAction
+  reason          String?
+  evaluationMs    Int           // Latency tracking
+  createdAt       DateTime      @default(now())
+
+  policyRule      PolicyRule    @relation(fields: [policyRuleId], references: [id], onDelete: Cascade)
+  task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([policyRuleId])
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("policy_evaluations")
+}
+
+// ================================
+// BUDGETS & COST TRACKING
+// ================================
+
+model Budget {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  agentId         String?  // null = workspace-level budget
+  maxTokens       Int?
+  maxCostUsd      Float?
+  periodStart     DateTime
+  periodEnd       DateTime
+  currentTokens   Int      @default(0)
+  currentCostUsd  Float    @default(0)
+  alertThreshold  Float?   // Alert at X% of budget
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@map("budgets")
+}
+
+// ================================
+// AUDIT & COMPLIANCE
+// ================================
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  eventType   String   // e.g., "agent.created", "task.cancelled", "policy.updated"
+  entityType  String   // e.g., "agent", "task", "policy"
+  entityId    String?
+  action      String   // CRUD operation
+  metadata    Json
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+// ================================
+// TIME-SERIES METRICS (TimescaleDB)
+// ================================
+
+model Metric {
+  id          String   @id @default(cuid())
+  workspaceId String
+  agentId     String?
+  metricName  String   // "token_usage", "cost", "latency", etc.
+  value       Float
+  tags        Json?    // Additional metadata
+  timestamp   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([metricName])
+  @@index([timestamp])
+  @@map("metrics")
+}

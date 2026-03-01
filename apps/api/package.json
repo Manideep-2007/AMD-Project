@@ -1,0 +1,37 @@
+{
+  "name": "@nexusops/api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist node_modules"
+  },
+  "dependencies": {
+    "@nexusops/db": "workspace:*",
+    "@nexusops/logger": "workspace:*",
+    "@nexusops/policy": "workspace:*",
+    "@nexusops/queue": "workspace:*",
+    "@nexusops/types": "workspace:*",
+    "@fastify/auth": "^5.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/helmet": "^12.0.0",
+    "@fastify/jwt": "^9.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "fastify": "^5.0.0",
+    "zod": "^3.25.0",
+    "bcrypt": "^5.1.1",
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.16.5",
+    "@types/ws": "^8.5.10",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

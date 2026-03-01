@@ -1,0 +1,26 @@
+{
+  "name": "@nexusops/worker",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist node_modules"
+  },
+  "dependencies": {
+    "@nexusops/db": "workspace:*",
+    "@nexusops/logger": "workspace:*",
+    "@nexusops/policy": "workspace:*",
+    "@nexusops/queue": "workspace:*",
+    "@nexusops/types": "workspace:*",
+    "axios": "^1.7.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

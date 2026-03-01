@@ -1,0 +1,28 @@
+{
+  "name": "@nexusops/proxy",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist node_modules"
+  },
+  "dependencies": {
+    "@nexusops/db": "workspace:*",
+    "@nexusops/logger": "workspace:*",
+    "@nexusops/policy": "workspace:*",
+    "@nexusops/types": "workspace:*",
+    "@octokit/rest": "^21.0.2",
+    "axios": "^1.7.9",
+    "pg": "^8.13.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "@types/pg": "^8.11.10",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

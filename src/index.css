@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 230 15% 5%;
+    --foreground: 220 20% 92%;
+
+    --card: 230 14% 8%;
+    --card-foreground: 220 20% 92%;
+
+    --popover: 230 14% 8%;
+    --popover-foreground: 220 20% 92%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 230 12% 14%;
+    --secondary-foreground: 220 15% 75%;
+
+    --muted: 230 10% 12%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 230 12% 16%;
+    --accent-foreground: 220 20% 92%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 0%;
+
+    --border: 230 10% 16%;
+    --input: 230 10% 16%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 230 15% 6%;
+    --sidebar-foreground: 220 15% 70%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 230 12% 12%;
+    --sidebar-accent-foreground: 220 20% 92%;
+    --sidebar-border: 230 10% 14%;
+    --sidebar-ring: 217 91% 60%;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 160 84% 39%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 0 72% 51%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 700;
+  }
+
+  code, .font-mono {
+    font-family: 'IBM Plex Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .animate-count-up {
+    animation: countUp 1s ease-out forwards;
+  }
+
+  .glow-blue {
+    box-shadow: 0 0 20px -5px hsl(217 91% 60% / 0.3);
+  }
+
+  .glow-emerald {
+    box-shadow: 0 0 20px -5px hsl(160 84% 39% / 0.3);
+  }
+
+  .glow-amber {
+    box-shadow: 0 0 20px -5px hsl(38 92% 50% / 0.3);
+  }
+
+  .gradient-mesh {
+    background:
+      radial-gradient(ellipse at 20% 50%, hsl(217 91% 60% / 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, hsl(160 84% 39% / 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, hsl(280 65% 60% / 0.04) 0%, transparent 50%);
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(230 15% 5%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(230 10% 20%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(230 10% 30%);
+}
