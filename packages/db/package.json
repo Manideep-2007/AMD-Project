@@ -8,6 +8,8 @@
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:prod": "prisma migrate deploy",
+    "build": "prisma generate",
+    "lint": "echo 'No linting for DB package'",
     "studio": "prisma studio",
     "seed": "tsx src/seed.ts",
     "clean": "rimraf .prisma node_modules"
