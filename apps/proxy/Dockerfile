@@ -1,5 +1,10 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:22-bookworm-slim AS builder
+
+# Install security updates
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
@@ -29,7 +34,15 @@ RUN pnpm --filter @nexusops/db generate
 RUN pnpm --filter @nexusops/proxy build
 
 # Production stage
-FROM node:20-alpine AS runner
+FROM node:22-bookworm-slim AS runner
+
+# Install security updates
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r nexusops && useradd -r -g nexusops nexusops
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
@@ -37,16 +50,22 @@ RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 WORKDIR /app
 
 # Copy built application
-COPY --from=builder /app/apps/proxy/dist ./apps/proxy/dist
-COPY --from=builder /app/apps/proxy/package.json ./apps/proxy/
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --from=builder --chown=nexusops:nexusops /app/apps/proxy/dist ./apps/proxy/dist
+COPY --from=builder --chown=nexusops:nexusops /app/apps/proxy/package.json ./apps/proxy/
+COPY --from=builder --chown=nexusops:nexusops /app/packages ./packages
+COPY --from=builder --chown=nexusops:nexusops /app/node_modules ./node_modules
+COPY --from=builder --chown=nexusops:nexusops /app/package.json ./
+
+# Switch to non-root user
+USER nexusops
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3002
 
 EXPOSE 3002
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3002/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
 CMD ["node", "apps/proxy/dist/index.js"]

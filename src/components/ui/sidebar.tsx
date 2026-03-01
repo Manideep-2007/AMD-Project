@@ -108,6 +108,7 @@ const SidebarProvider = React.forwardRef<
   return (
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
+        {/* CSS custom properties for dynamic sidebar width - inline styles required for CSS variables */}
         <div
           style={
             {
