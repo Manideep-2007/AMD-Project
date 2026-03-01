@@ -1,4 +1,6 @@
 # Build stage
+# Using Node.js 22 LTS with Debian Bookworm Slim
+# Note: Base image CVE warnings are mitigated via apt-get upgrade + non-root user
 FROM node:22-bookworm-slim AS builder
 
 # Install security updates

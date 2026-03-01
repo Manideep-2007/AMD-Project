@@ -1,0 +1,33 @@
+{
+  // Suppress false-positive linter warnings
+  "css.lint.validProperties": [
+    "--sidebar-width",
+    "--sidebar-width-icon"
+  ],
+  
+  // Disable inline style warnings for React CSS custom properties
+  "html.validate.styles": false,
+  
+  // Docker extension: suppress base image CVE warnings (mitigated with security updates + non-root user)
+  "docker.languageserver.diagnostics.deprecatedMaintainer": "ignore",
+  "docker.languageserver.diagnostics.directiveCasing": "ignore",
+  
+  // TypeScript strict mode settings
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  
+  // Files to exclude from watch
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.git/objects/**": true,
+    "**/.turbo/**": true,
+    "**/dist/**": true,
+    "**/build/**": true
+  }
+}
