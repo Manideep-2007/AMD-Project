@@ -1,0 +1,14 @@
+title = "NexusOps Gitleaks Configuration"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Globally allowlisted paths.
+# .env.example files are intentional TEMPLATES — they must show the shape of
+# every required variable, so they are expected to contain realistic-looking
+# placeholder values.  They must NEVER contain real credentials.
+# ──────────────────────────────────────────────────────────────────────────────
+[allowlist]
+  description = "Allow example/template environment files"
+  paths = [
+    '''\.env\.example$''',
+    '''env\.example$''',
+  ]

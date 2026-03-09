@@ -158,10 +158,7 @@ fn evaluate_statement(stmt: &Statement, schema: &SafetySchema) -> SqlGateDecisio
     if !blocked_found.is_empty() {
         return SqlGateDecision {
             allowed: false,
-            reason: format!(
-                "Query references blocked columns: {:?}",
-                blocked_found
-            ),
+            reason: format!("Query references blocked columns: {:?}", blocked_found),
             statement_type: Some(stmt_type),
             affected_tables: tables,
             blocked_columns_found: blocked_found,
@@ -225,7 +222,9 @@ fn extract_tables(stmt: &Statement) -> Vec<String> {
         Statement::AlterTable { ref name, .. } => {
             tables.push(name.to_string());
         }
-        Statement::Truncate { ref table_names, .. } => {
+        Statement::Truncate {
+            ref table_names, ..
+        } => {
             for tn in table_names {
                 tables.push(tn.name.to_string());
             }
@@ -314,7 +313,11 @@ fn contains_tautology(stmt: &Statement) -> bool {
 
 fn is_tautology(expr: &Expr) -> bool {
     match expr {
-        Expr::BinaryOp { left, op: sqlparser::ast::BinaryOperator::Eq, right } => {
+        Expr::BinaryOp {
+            left,
+            op: sqlparser::ast::BinaryOperator::Eq,
+            right,
+        } => {
             // Check 1=1 pattern
             matches!(
                 (left.as_ref(), right.as_ref()),
@@ -332,11 +335,7 @@ mod tests {
 
     fn permissive_schema() -> SafetySchema {
         SafetySchema {
-            permitted_statements: vec![
-                "SELECT".into(),
-                "INSERT".into(),
-                "UPDATE".into(),
-            ],
+            permitted_statements: vec!["SELECT".into(), "INSERT".into(), "UPDATE".into()],
             permitted_tables: vec![],
             blocked_tables: vec!["system_config".into()],
             permitted_columns: vec![],

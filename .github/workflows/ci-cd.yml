@@ -44,6 +44,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       
+      - name: Generate Prisma client
+        run: pnpm --filter @nexusops/db run generate
+        env:
+          DATABASE_URL: postgresql://localhost:5432/dummy
+      
       - name: Lint
         run: pnpm lint
       
@@ -174,7 +179,7 @@ jobs:
           chmod +x gitleaks
 
       - name: Secret scan (gitleaks)
-        run: ./gitleaks detect --source . --no-banner --verbose
+        run: ./gitleaks detect --source . --config .gitleaks.toml --no-banner --verbose
 
       # OPTIONAL but non-blocking only if SNYK_TOKEN not configured
       - name: Run Snyk to check for vulnerabilities

@@ -35,8 +35,8 @@ impl PolicyCache {
             }
         };
 
-        let schemas: Vec<(String, SafetySchema)> = serde_json::from_str(schemas_json)
-            .unwrap_or_default();
+        let schemas: Vec<(String, SafetySchema)> =
+            serde_json::from_str(schemas_json).unwrap_or_default();
 
         let mut compiled: Vec<CompiledRule> = rules
             .into_iter()
@@ -78,9 +78,8 @@ impl PolicyCache {
 
     /// Get safety schema for a specific agent in a workspace.
     pub fn get_safety_schema(&self, workspace_id: &str, agent_id: &str) -> Option<SafetySchema> {
-        self.get(workspace_id).and_then(|wp| {
-            wp.safety_schemas.get(agent_id).map(|s| s.clone())
-        })
+        self.get(workspace_id)
+            .and_then(|wp| wp.safety_schemas.get(agent_id).map(|s| s.clone()))
     }
 
     /// Return the number of workspaces currently in cache.
