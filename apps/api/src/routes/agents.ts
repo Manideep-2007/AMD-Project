@@ -18,7 +18,7 @@ const createAgentSchema = z.object({
 const listAgentsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  status: z.string().optional(),
+  status: z.nativeEnum(AgentStatus).optional(),
 });
 
 export const agentsRoutes: FastifyPluginAsync = async (app) => {

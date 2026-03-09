@@ -165,12 +165,16 @@ jobs:
         run: pnpm audit --audit-level=high
 
       # BLOCKING: scan for secrets/credentials committed to source
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION="8.21.2"
+          curl -sSLf "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+          tar xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Set GITLEAKS_LICENSE if using the commercial edition
-          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        run: ./gitleaks detect --source . --no-banner --verbose
 
       # OPTIONAL but non-blocking only if SNYK_TOKEN not configured
       - name: Run Snyk to check for vulnerabilities

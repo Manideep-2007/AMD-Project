@@ -35,7 +35,7 @@ if (!JWT_REFRESH_SECRET) {
 }
 
 function signRefreshToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, JWT_REFRESH_SECRET!, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' });
+  return jwt.sign(payload, JWT_REFRESH_SECRET!, { expiresIn: (process.env.JWT_REFRESH_EXPIRY || '7d') as jwt.SignOptions['expiresIn'] });
 }
 
 function verifyRefreshToken(token: string): Record<string, unknown> {
@@ -60,6 +60,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (!user) {
+      return reply.code(401).send({
+        data: null,
+        meta: { requestId: request.id, timestamp: new Date().toISOString() },
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'Invalid email or password',
+        },
+      });
+    }
+
+    if (!user.passwordHash) {
       return reply.code(401).send({
         data: null,
         meta: { requestId: request.id, timestamp: new Date().toISOString() },
