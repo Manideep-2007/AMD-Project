@@ -79,6 +79,7 @@ temp/
 *.pem
 *.key
 *.cert
+.secrets.baseline
 
 # Misc
 .Trash-*

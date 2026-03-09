@@ -14,7 +14,7 @@ const logger = createLogger('proxy');
 export class ProxyManager {
   private githubProxy?: GitHubProxy;
   private jiraProxy?: JiraProxy;
-  private databaseProxy?: DatabaseProxy;
+  private databaseProxy: DatabaseProxy;
   private cloudDeployProxy: CloudDeployProxy;
 
   constructor() {
@@ -31,9 +31,9 @@ export class ProxyManager {
       );
     }
 
-    if (process.env.DATABASE_URL) {
-      this.databaseProxy = new DatabaseProxy(process.env.DATABASE_URL);
-    }
+    // DatabaseProxy is a factory — NOT initialized with a global URL.
+    // It creates per-execution connections from agent's customerDatabaseUrl.
+    this.databaseProxy = new DatabaseProxy();
 
     this.cloudDeployProxy = new CloudDeployProxy();
 
@@ -41,9 +41,10 @@ export class ProxyManager {
   }
 
   /**
-   * Route a tool call to the appropriate proxy
+   * Route a tool call to the appropriate proxy.
+   * For DATABASE calls, customerDbUrl and agentId must be provided.
    */
-  async route(toolType: string, request: any) {
+  async route(toolType: string, request: any, customerDbUrl?: string, agentId?: string) {
     logger.info({ toolType, method: request.toolMethod }, 'Routing tool call');
 
     switch (toolType) {
@@ -60,10 +61,7 @@ export class ProxyManager {
         return this.jiraProxy.call(request);
 
       case 'DATABASE':
-        if (!this.databaseProxy) {
-          throw new Error('Database proxy not configured');
-        }
-        return this.databaseProxy.call(request);
+        return this.databaseProxy.call(request, customerDbUrl, agentId);
 
       case 'CLOUD_DEPLOY':
         return this.cloudDeployProxy.call(request);
@@ -74,9 +72,7 @@ export class ProxyManager {
   }
 
   async close() {
-    if (this.databaseProxy) {
-      await this.databaseProxy.close();
-    }
+    // DatabaseProxy no longer holds a persistent pool
     logger.info('Tool proxies closed');
   }
 }

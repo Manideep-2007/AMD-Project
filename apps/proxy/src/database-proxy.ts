@@ -5,57 +5,116 @@ import type { ToolCallRequest, ToolCallResponse } from '@nexusops/types';
 const logger = createLogger('proxy:database');
 
 /**
- * Database Proxy
+ * Database Proxy — per-execution scoped connections to CUSTOMER databases.
+ *
+ * CRITICAL: This proxy NEVER connects to the NexusOps platform database.
+ * Each execution creates a scoped pool from the agent's customerDatabaseUrl
+ * (decrypted at execution time) and destroys it after the query.
+ *
  * Allowed: SELECT, scoped INSERT/UPDATE
  * Blocked: DROP, TRUNCATE, schema changes without approval
  */
 export class DatabaseProxy {
-  private pool: Pool;
-
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString });
-  }
-
-  async call(request: ToolCallRequest): Promise<ToolCallResponse> {
+  /**
+   * Execute a query against a CUSTOMER database URL.
+   * Creates a temporary pool, runs the query, and destroys the pool.
+   *
+   * @param request - Tool call request with input.query and input.params
+   * @param customerDbUrl - Decrypted customer database connection string
+   * @param agentId - Agent ID for logging
+   */
+  async execute(
+    request: ToolCallRequest,
+    customerDbUrl: string,
+    agentId: string,
+  ): Promise<ToolCallResponse> {
     const startTime = Date.now();
 
-    try {
-      logger.info({ method: request.toolMethod }, 'Database proxy call');
+    // Reject if accidentally passed the platform DATABASE_URL
+    if (customerDbUrl === process.env.DATABASE_URL) {
+      logger.error({ agentId }, 'SECURITY: Attempted to use platform DATABASE_URL as customer DB');
+      return {
+        success: false,
+        blocked: true,
+        blockReason: 'CUSTOMER_DB_URL_REQUIRED — Cannot use platform database',
+        durationMs: Date.now() - startTime,
+      };
+    }
 
-      const { query, params } = request.input;
+    const { query, params } = request.input;
 
-      // Block dangerous operations
-      const dangerousPatterns = [
-        /DROP\s+(TABLE|DATABASE|SCHEMA)/i,
-        /TRUNCATE/i,
-        /ALTER\s+TABLE/i,
-        /DELETE\s+FROM/i, // Require specific approval for DELETE
-      ];
+    // Enforce parameterized queries — raw string interpolation is blocked
+    if (typeof query !== 'string' || !query.trim()) {
+      return {
+        success: false,
+        blocked: true,
+        blockReason: 'Query must be a non-empty string',
+        durationMs: Date.now() - startTime,
+      };
+    }
 
-      for (const pattern of dangerousPatterns) {
-        if (pattern.test(query as string)) {
-          return {
-            success: false,
-            blocked: true,
-            blockReason: `Query contains blocked operation: ${pattern.source}`,
-            durationMs: Date.now() - startTime,
-          };
-        }
+    // Detect string interpolation / concatenation attempts
+    const suspiciousPatterns = [
+      /'\s*\+\s*/,           // String concatenation: ' +
+      /\$\{/,               // Template literals: ${
+      /'\s*\|\|\s*'/,       // SQL concat: ' || '
+      /;\s*--/,             // SQL comment injection: ; --
+      /;\s*(DROP|DELETE|INSERT|UPDATE|ALTER|TRUNCATE)/i, // Stacked queries
+    ];
+
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(query)) {
+        return {
+          success: false,
+          blocked: true,
+          blockReason: `Potential SQL injection detected: ${pattern.source}. Use parameterized queries ($1, $2, ...).`,
+          durationMs: Date.now() - startTime,
+        };
       }
+    }
 
-      // Execute query
-      const result = await this.pool.query(query as string, params as any[]);
+    // Block always-dangerous DDL operations
+    const dangerousPatterns = [
+      /DROP\s+(TABLE|DATABASE|SCHEMA)/i,
+      /TRUNCATE/i,
+      /ALTER\s+TABLE/i,
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(query)) {
+        return {
+          success: false,
+          blocked: true,
+          blockReason: `Query contains blocked operation: ${pattern.source}`,
+          durationMs: Date.now() - startTime,
+        };
+      }
+    }
+
+    // Create scoped pool for this execution only — never cached
+    const pool = new Pool({
+      connectionString: customerDbUrl,
+      max: 2,
+      idleTimeoutMillis: 5000,
+      connectionTimeoutMillis: 3000,
+      ssl: { rejectUnauthorized: true },
+    });
+
+    try {
+      const safeParams = Array.isArray(params) ? params : [];
+      const result = await pool.query(query, safeParams);
 
       return {
         success: true,
         output: {
           rows: result.rows,
           rowCount: result.rowCount,
+          command: result.command,
         },
         durationMs: Date.now() - startTime,
       };
     } catch (error: any) {
-      logger.error({ error: error.message }, 'Database proxy error');
+      logger.error({ error: error.message, agentId }, 'Database proxy error');
 
       return {
         success: false,
@@ -65,10 +124,31 @@ export class DatabaseProxy {
           code: 'PROXY_ERROR',
         },
       };
+    } finally {
+      // Always destroy pool — no connection reuse between executions
+      await pool.end().catch((err: any) =>
+        logger.warn({ err: err.message }, 'Pool cleanup error'),
+      );
     }
   }
 
-  async close() {
-    await this.pool.end();
+  /**
+   * Legacy call() method — delegates to execute() for backward compatibility.
+   * Requires customerDbUrl and agentId to be set on the request.
+   */
+  async call(
+    request: ToolCallRequest,
+    customerDbUrl?: string,
+    agentId?: string,
+  ): Promise<ToolCallResponse> {
+    if (!customerDbUrl) {
+      return {
+        success: false,
+        blocked: true,
+        blockReason: 'DATABASE_NOT_CONFIGURED — No customer database URL provided. Set customerDatabaseUrl in agent configuration.',
+        durationMs: 0,
+      };
+    }
+    return this.execute(request, customerDbUrl, agentId ?? 'unknown');
   }
 }

@@ -2,6 +2,26 @@ import { prisma, PolicyAction, type Prisma } from '@nexusops/db';
 import { PolicyEvaluator } from './evaluator';
 import type { PolicyContext, PolicyRule, PolicyEvaluationResult } from './types';
 
+// ─── Redis Pub/Sub for cross-instance cache invalidation ───
+const POLICY_INVALIDATION_CHANNEL = 'nexusops:policy:invalidate';
+let redisPub: any = null;
+let redisSub: any = null;
+
+function initRedis() {
+  if (!process.env.REDIS_URL) return;
+  try {
+    const Redis = require('ioredis');
+    redisPub = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
+    redisSub = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
+    redisPub.connect().catch(() => { redisPub = null; });
+    redisSub.connect().catch(() => { redisSub = null; });
+  } catch {
+    // Redis not available — local cache only
+  }
+}
+
+initRedis();
+
 /**
  * Policy Engine Service
  * Manages policy evaluation with database integration and caching
@@ -67,11 +87,38 @@ export class PolicyEngine {
   }
 
   /**
-   * Invalidate cache for a workspace
+   * Invalidate cache for a workspace (local + broadcast via Redis pub/sub)
    */
   invalidateCache(workspaceId: string): void {
     this.ruleCache.delete(workspaceId);
     this.lastCacheUpdate.delete(workspaceId);
+
+    // Broadcast invalidation to all instances via Redis pub/sub
+    if (redisPub) {
+      redisPub.publish(POLICY_INVALIDATION_CHANNEL, workspaceId).catch(() => {});
+    }
+  }
+
+  /**
+   * Handle remote invalidation from Redis pub/sub (no re-broadcast)
+   */
+  private handleRemoteInvalidation(workspaceId: string): void {
+    this.ruleCache.delete(workspaceId);
+    this.lastCacheUpdate.delete(workspaceId);
+  }
+
+  /**
+   * Subscribe to Redis pub/sub for cross-instance cache invalidation.
+   * Call once during service startup.
+   */
+  startCacheSubscription(): void {
+    if (!redisSub) return;
+    redisSub.subscribe(POLICY_INVALIDATION_CHANNEL).catch(() => {});
+    redisSub.on('message', (channel: string, message: string) => {
+      if (channel === POLICY_INVALIDATION_CHANNEL) {
+        this.handleRemoteInvalidation(message);
+      }
+    });
   }
 
   /**

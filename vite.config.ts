@@ -19,4 +19,7 @@ export default defineConfig({
       },
     },
   },
+  // Vitest config lives in vitest.config.ts (root) and each package/app.
+  // Do NOT add a `test` section here — it would be picked up instead of the
+  // dedicated vitest.config.ts and set the wrong environment for backend tests.
 });

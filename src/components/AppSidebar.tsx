@@ -8,14 +8,19 @@ import {
   Settings,
   ChevronLeft,
   Zap,
+  ShieldAlert,
+  Lock,
+  Brain,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
+import { useApprovalStats } from "@/hooks/use-api";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -24,13 +29,22 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+const navMain = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agents", url: "/agents", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListTodo },
   { title: "Policies", url: "/policies", icon: Shield },
   { title: "Tools", url: "/tools", icon: Wrench },
   { title: "Audit Log", url: "/audit", icon: ScrollText },
+];
+
+const navGovernance = [
+  { title: "Approvals", url: "/approvals", icon: ShieldAlert, badge: true },
+  { title: "Security", url: "/security", icon: Lock },
+  { title: "Intelligence", url: "/intelligence", icon: Brain },
+];
+
+const navSystem = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
@@ -38,6 +52,38 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { data: statsData } = useApprovalStats();
+  const pendingCount = statsData?.data?.pending || 0;
+
+  const renderItems = (items: typeof navMain) =>
+    items.map((item) => {
+      const isActive = location.pathname === item.url;
+      const showBadge = 'badge' in item && (item as any).badge && pendingCount > 0;
+      return (
+        <SidebarMenuItem key={item.title}>
+          <SidebarMenuButton asChild isActive={isActive}>
+            <NavLink
+              to={item.url}
+              end
+              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent"
+              activeClassName="bg-accent text-foreground font-medium"
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!collapsed && (
+                <>
+                  <span className="flex-1">{item.title}</span>
+                  {showBadge && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-warning/20 px-1.5 text-[10px] font-bold text-warning">
+                      {pendingCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      );
+    });
 
   return (
     <Sidebar collapsible="icon">
@@ -57,26 +103,28 @@ export function AppSidebar() {
 
       <SidebarContent className="px-2 py-3">
         <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground px-3 mb-1">Operations</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.url;
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <NavLink
-                        to={item.url}
-                        end
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent"
-                        activeClassName="bg-accent text-foreground font-medium"
-                      >
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {renderItems(navMain)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-4">
+          {!collapsed && <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground px-3 mb-1">Governance</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {renderItems(navGovernance)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-4">
+          {!collapsed && <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground px-3 mb-1">System</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {renderItems(navSystem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

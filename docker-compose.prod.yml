@@ -1,0 +1,169 @@
+# docker-compose.prod.yml — Production overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Adds:
+#   - Redis Sentinel (3-node) for HA failover
+#   - TLS between internal services via shared volume of certs
+
+version: '3.9'
+
+services:
+  # ── Redis Sentinel HA Setup ────────────────
+  redis-master:
+    image: redis:7-alpine
+    container_name: nexusops-redis-master
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      --masterauth ${REDIS_PASSWORD}
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    expose:
+      - '6379'
+    volumes:
+      - redis_master_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: nexusops-redis-replica
+    restart: unless-stopped
+    command: >
+      redis-server
+      --replicaof redis-master 6379
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --appendonly yes
+    expose:
+      - '6379'
+    volumes:
+      - redis_replica_data:/data
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis-sentinel-1:
+    image: redis:7-alpine
+    container_name: nexusops-sentinel-1
+    restart: unless-stopped
+    command: >
+      sh -c "cat > /tmp/sentinel.conf <<EOF
+      sentinel monitor nexusops-master redis-master 6379 2
+      sentinel auth-pass nexusops-master ${REDIS_PASSWORD}
+      sentinel down-after-milliseconds nexusops-master 5000
+      sentinel failover-timeout nexusops-master 10000
+      sentinel parallel-syncs nexusops-master 1
+      EOF
+      redis-sentinel /tmp/sentinel.conf"
+    expose:
+      - '26379'
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - internal
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    container_name: nexusops-sentinel-2
+    restart: unless-stopped
+    command: >
+      sh -c "cat > /tmp/sentinel.conf <<EOF
+      sentinel monitor nexusops-master redis-master 6379 2
+      sentinel auth-pass nexusops-master ${REDIS_PASSWORD}
+      sentinel down-after-milliseconds nexusops-master 5000
+      sentinel failover-timeout nexusops-master 10000
+      sentinel parallel-syncs nexusops-master 1
+      EOF
+      redis-sentinel /tmp/sentinel.conf"
+    expose:
+      - '26379'
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - internal
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    container_name: nexusops-sentinel-3
+    restart: unless-stopped
+    command: >
+      sh -c "cat > /tmp/sentinel.conf <<EOF
+      sentinel monitor nexusops-master redis-master 6379 2
+      sentinel auth-pass nexusops-master ${REDIS_PASSWORD}
+      sentinel down-after-milliseconds nexusops-master 5000
+      sentinel failover-timeout nexusops-master 10000
+      sentinel parallel-syncs nexusops-master 1
+      EOF
+      redis-sentinel /tmp/sentinel.conf"
+    expose:
+      - '26379'
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # Override existing redis to not start in prod — use sentinel instead
+  redis:
+    profiles:
+      - dev-only
+
+  # Override service env vars to use Sentinel-aware URLs
+  api:
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis-master:6379
+      REDIS_SENTINEL_HOSTS: redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      REDIS_SENTINEL_NAME: nexusops-master
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-sentinel-1:
+        condition: service_started
+      redis-sentinel-2:
+        condition: service_started
+
+  worker:
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis-master:6379
+      REDIS_SENTINEL_HOSTS: redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      REDIS_SENTINEL_NAME: nexusops-master
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-sentinel-1:
+        condition: service_started
+
+  proxy:
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis-master:6379
+      REDIS_SENTINEL_HOSTS: redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      REDIS_SENTINEL_NAME: nexusops-master
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-sentinel-1:
+        condition: service_started
+
+volumes:
+  redis_master_data:
+  redis_replica_data:

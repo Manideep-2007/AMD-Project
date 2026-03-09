@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
-import { prisma, AgentStatus, type Prisma } from '@nexusops/db';
+import { prisma, AgentStatus, TaskStatus, type Prisma } from '@nexusops/db';
 import { z } from 'zod';
+import { appendAuditEvent } from '@nexusops/events';
 
 const createAgentSchema = z.object({
   name: z.string().min(1),
@@ -14,13 +15,19 @@ const createAgentSchema = z.object({
   maxDepth: z.number().default(10),
 });
 
+const listAgentsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  status: z.string().optional(),
+});
+
 export const agentsRoutes: FastifyPluginAsync = async (app) => {
   /**
    * POST /api/v1/agents
    * Register a new agent
    */
   app.post('/', {
-    onRequest: [app.authenticate],
+    onRequest: [app.authenticate, app.checkRole(['OWNER', 'ADMIN', 'OPERATOR'])],
     handler: async (request, reply) => {
       const body = createAgentSchema.parse(request.body);
 
@@ -40,17 +47,15 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      // Audit log
-      await prisma.auditEvent.create({
-        data: {
-          workspaceId: request.workspaceId!,
-          userId: request.user?.userId,
-          eventType: 'agent.created',
-          entityType: 'agent',
-          entityId: agent.id,
-          action: 'CREATE',
-          metadata: { agentName: agent.name },
-        },
+      // Audit log (SHA-3 chained — never bypass with prisma.auditEvent.create)
+      await appendAuditEvent({
+        workspaceId: request.workspaceId!,
+        userId: request.user?.userId,
+        eventType: 'agent.created',
+        entityType: 'agent',
+        entityId: agent.id,
+        action: 'CREATE',
+        metadata: { agentName: agent.name },
       });
 
       return {
@@ -68,7 +73,7 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', {
     onRequest: [app.authenticate],
     handler: async (request, reply) => {
-      const { page = 1, limit = 50, status } = request.query as any;
+      const { page, limit, status } = listAgentsQuerySchema.parse(request.query);
 
       const where = {
         workspaceId: request.workspaceId!,
@@ -177,21 +182,118 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      // Audit log
-      await prisma.auditEvent.create({
-        data: {
-          workspaceId: request.workspaceId!,
-          userId: request.user?.userId,
-          eventType: 'agent.terminated',
-          entityType: 'agent',
-          entityId: agent.id,
-          action: 'DELETE',
-          metadata: { agentName: agent.name },
-        },
+      // Audit log (SHA-3 chained — never bypass with prisma.auditEvent.create)
+      await appendAuditEvent({
+        workspaceId: request.workspaceId!,
+        userId: request.user?.userId,
+        eventType: 'agent.terminated',
+        entityType: 'agent',
+        entityId: agent.id,
+        action: 'DELETE',
+        metadata: { agentName: agent.name },
       });
 
       return {
         data: { success: true },
+        meta: { requestId: request.id, timestamp: new Date().toISOString() },
+        error: null,
+      };
+    },
+  });
+
+  /**
+   * POST /api/v1/agents/:id/emergency-stop
+   * Emergency kill switch — terminates agent AND cancels all its running tasks.
+   * This is the "red button" endpoint the audit requires.
+   */
+  app.post('/:id/emergency-stop', {
+    onRequest: [app.authenticate, app.checkRole(['OWNER', 'ADMIN', 'OPERATOR'])],
+    handler: async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      const agent = await prisma.agent.findFirst({
+        where: { id, workspaceId: request.workspaceId! },
+      });
+
+      if (!agent) {
+        return reply.code(404).send({
+          data: null,
+          meta: { requestId: request.id, timestamp: new Date().toISOString() },
+          error: { code: 'NOT_FOUND', message: 'Agent not found' },
+        });
+      }
+
+      if (agent.status === AgentStatus.TERMINATED) {
+        return reply.code(400).send({
+          data: null,
+          meta: { requestId: request.id, timestamp: new Date().toISOString() },
+          error: { code: 'ALREADY_TERMINATED', message: 'Agent is already terminated' },
+        });
+      }
+
+      // 1. Terminate agent
+      await prisma.agent.update({
+        where: { id },
+        data: {
+          status: AgentStatus.TERMINATED,
+          terminatedAt: new Date(),
+        },
+      });
+
+      // 2. Cancel ALL running/pending tasks for this agent
+      const cancelledTasks = await prisma.task.updateMany({
+        where: {
+          agentId: id,
+          workspaceId: request.workspaceId!,
+          status: { in: [TaskStatus.RUNNING, TaskStatus.PENDING, TaskStatus.PENDING_APPROVAL, TaskStatus.QUEUED] },
+        },
+        data: {
+          status: TaskStatus.CANCELLED,
+          completedAt: new Date(),
+        },
+      });
+
+      // 3. Auto-deny any pending approvals for this agent's tasks
+      const pendingApprovals = await prisma.taskApproval.findMany({
+        where: {
+          decidedAt: null,
+          task: { agentId: id, workspaceId: request.workspaceId! },
+        },
+      });
+
+      for (const approval of pendingApprovals) {
+        await prisma.taskApproval.update({
+          where: { id: approval.id },
+          data: {
+            approved: false,
+            userId: request.user?.userId ?? null,
+            reason: 'Agent emergency-stopped',
+            decidedAt: new Date(),
+          },
+        });
+      }
+
+      // 4. Audit event (cryptographic chain)
+      await appendAuditEvent({
+        workspaceId: request.workspaceId!,
+        userId: request.user?.userId,
+        eventType: 'agent.emergency_stop',
+        entityType: 'agent',
+        entityId: id,
+        action: 'EMERGENCY_STOP',
+        metadata: {
+          agentName: agent.name,
+          cancelledTaskCount: cancelledTasks.count,
+          cancelledApprovalCount: pendingApprovals.length,
+        },
+      });
+
+      return {
+        data: {
+          success: true,
+          cancelledTasks: cancelledTasks.count,
+          cancelledApprovals: pendingApprovals.length,
+        },
         meta: { requestId: request.id, timestamp: new Date().toISOString() },
         error: null,
       };

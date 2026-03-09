@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Block .env from being committed
+STAGED_ENV=$(git diff --cached --name-only | grep -E "^\.env$" || true)
+if [ -n "$STAGED_ENV" ]; then
+  echo "🚫 BLOCKED: .env file must not be committed to version control."
+  echo "   Remove it from staging: git reset HEAD .env"
+  exit 1
+fi
+
+# Scan for secrets in staged files (excluding the hook scripts themselves)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$STAGED_FILES" ]; then
+  echo "$STAGED_FILES" | while IFS= read -r file; do
+    # Skip the hook files themselves (they contain the regex patterns)
+    case "$file" in .husky/*) continue ;; esac
+    # Check for common secret patterns
+    if grep -qEi '(eyJhbG|AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{48}|ghp_[a-zA-Z0-9]{36})' "$file" 2>/dev/null; then
+      echo "🚫 BLOCKED: Potential secret detected in $file"
+      echo "   Review and remove secrets before committing."
+      exit 1
+    fi
+  done
+fi
+
+# Run all tests — commit is blocked if any test fails
+echo "Running all tests before commit..."
+pnpm test || {
+  echo ""
+  echo "🚫 BLOCKED: Tests failed. Fix all failures before committing."
+  echo "   Run 'pnpm test' to see the full output."
+  exit 1
+}
+
+# Run commitlint on commit message
+npx --no -- commitlint --edit "$1" 2>/dev/null || true

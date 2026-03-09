@@ -1,12 +1,12 @@
 # Build stage
-# Using Node.js 22 LTS with Debian Bookworm Slim
-# Note: Base image CVE warnings are mitigated via apt-get upgrade + non-root user
-FROM node:22-bookworm-slim AS builder
+# Using Node.js 22 LTS Alpine — minimal attack surface, significantly fewer CVEs than Debian.
+# Note: Any remaining CVEs reported by scanners (e.g. VS Code Docker extension) are in the
+# Node.js 22 runtime itself and cannot be resolved at the Dockerfile level. These are tracked
+# and mitigated by the Snyk security scan step in .github/workflows/ci-cd.yml.
+FROM node:22-alpine AS builder
 
-# Install security updates
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    openssl \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies (openssl required by Prisma)
+RUN apk add --no-cache openssl
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
@@ -19,9 +19,15 @@ COPY turbo.json ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/db/package.json ./packages/db/
 COPY packages/logger/package.json ./packages/logger/
+COPY packages/telemetry/package.json ./packages/telemetry/
 COPY packages/policy/package.json ./packages/policy/
 COPY packages/queue/package.json ./packages/queue/
 COPY packages/types/package.json ./packages/types/
+COPY packages/events/package.json ./packages/events/
+COPY packages/blast-radius/package.json ./packages/blast-radius/
+COPY packages/injection/package.json ./packages/injection/
+COPY packages/crypto/package.json ./packages/crypto/
+COPY packages/model-adapter/package.json ./packages/model-adapter/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -37,15 +43,13 @@ RUN pnpm --filter @nexusops/db generate
 RUN pnpm --filter @nexusops/api build
 
 # Production stage
-FROM node:22-bookworm-slim AS runner
+FROM node:22-alpine AS runner
 
-# Install security updates
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    openssl \
-    && rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies (openssl for Prisma, curl for docker-compose healthchecks)
+RUN apk add --no-cache openssl curl
 
 # Create non-root user
-RUN groupadd -r nexusops && useradd -r -g nexusops nexusops
+RUN addgroup -S nexusops && adduser -S -G nexusops nexusops
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate

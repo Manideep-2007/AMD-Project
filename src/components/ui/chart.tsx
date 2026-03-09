@@ -93,6 +93,9 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
     React.ComponentProps<"div"> & {
+      active?: boolean;
+      payload?: any[];  // eslint-disable-line @typescript-eslint/no-explicit-any
+      label?: string;
       hideLabel?: boolean;
       hideIndicator?: boolean;
       indicator?: "line" | "dot" | "dashed";
@@ -160,10 +163,10 @@ const ChartTooltipContent = React.forwardRef<
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item, index) => {
+          {payload.map((item: any, index: number) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`;
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
-            const indicatorColor = color || item.payload.fill || item.color;
+            const indicatorColor = color || item.payload?.fill || item.color;
 
             return (
               <div
@@ -182,18 +185,18 @@ const ChartTooltipContent = React.forwardRef<
                     ) : (
                       !hideIndicator && (
                         <div
+                          ref={(el) => {
+                            if (el) {
+                              el.style.setProperty("--color-bg", indicatorColor);
+                              el.style.setProperty("--color-border", indicatorColor);
+                            }
+                          }}
                           className={cn("shrink-0 rounded-[2px] border-[--color-border] bg-[--color-bg]", {
                             "h-2.5 w-2.5": indicator === "dot",
                             "w-1": indicator === "line",
                             "w-0 border-[1.5px] border-dashed bg-transparent": indicator === "dashed",
                             "my-0.5": nestLabel && indicator === "dashed",
                           })}
-                          style={
-                            {
-                              "--color-bg": indicatorColor,
-                              "--color-border": indicatorColor,
-                            } as React.CSSProperties
-                          }
                         />
                       )
                     )}
@@ -229,8 +232,9 @@ const ChartLegend = RechartsPrimitive.Legend;
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+  React.ComponentProps<"div"> & {
+      payload?: any[];  // eslint-disable-line @typescript-eslint/no-explicit-any
+      verticalAlign?: "top" | "bottom";
       hideIcon?: boolean;
       nameKey?: string;
     }
@@ -246,7 +250,7 @@ const ChartLegendContent = React.forwardRef<
       ref={ref}
       className={cn("flex items-center justify-center gap-4", verticalAlign === "top" ? "pb-3" : "pt-3", className)}
     >
-      {payload.map((item) => {
+      {payload?.map((item: any) => {
         const key = `${nameKey || item.dataKey || "value"}`;
         const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
@@ -259,10 +263,8 @@ const ChartLegendContent = React.forwardRef<
               <itemConfig.icon />
             ) : (
               <div
+                ref={(el) => { if (el) el.style.backgroundColor = item.color; }}
                 className="h-2 w-2 shrink-0 rounded-[2px]"
-                style={{
-                  backgroundColor: item.color,
-                }}
               />
             )}
             {itemConfig?.label}

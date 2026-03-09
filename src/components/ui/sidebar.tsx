@@ -108,7 +108,10 @@ const SidebarProvider = React.forwardRef<
   return (
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
-        {/* CSS custom properties for dynamic sidebar width - inline styles required for CSS variables */}
+        {/* CSS custom properties for dynamic sidebar width — inline styles are required
+            here because CSS custom properties (--sidebar-width) cannot be set via Tailwind
+            class names and MUST use the style prop. This is intentional and correct. */}
+        {/* eslint-disable-next-line react/forbid-component-props */}
         <div
           style={
             {

@@ -4,6 +4,106 @@ import { queueManager } from '@nexusops/queue';
 
 export const metricsRoutes: FastifyPluginAsync = async (app) => {
   /**
+   * GET /api/v1/metrics/dashboard
+   * Aggregated dashboard metrics (active agents, cost, violations, task rate)
+   */
+  app.get('/dashboard', {
+    onRequest: [app.authenticate],
+    handler: async (request, reply) => {
+      const workspaceId = request.workspaceId!;
+      const since1h = new Date(Date.now() - 60 * 60 * 1000);
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const [
+        activeAgents,
+        costToday,
+        policyViolations,
+        taskCount1h,
+        taskCountPrev1h,
+        agentCountPrev,
+        violationsPrev,
+      ] = await Promise.all([
+        // Active agents right now
+        prisma.agent.count({
+          where: { workspaceId, status: 'ACTIVE' },
+        }),
+        // Cost in last 24h
+        prisma.task.aggregate({
+          where: { workspaceId, createdAt: { gte: since24h } },
+          _sum: { costUsd: true },
+        }),
+        // Policy violations in last 24h
+        prisma.auditEvent.count({
+          where: {
+            workspaceId,
+            eventType: 'POLICY_VIOLATION',
+            createdAt: { gte: since24h },
+          },
+        }),
+        // Tasks in last 1h (for tasks/hour)
+        prisma.task.count({
+          where: { workspaceId, createdAt: { gte: since1h } },
+        }),
+        // Tasks in previous 1h (for change %)
+        prisma.task.count({
+          where: {
+            workspaceId,
+            createdAt: {
+              gte: new Date(Date.now() - 2 * 60 * 60 * 1000),
+              lt: since1h,
+            },
+          },
+        }),
+        // Agent count 1 day ago for change metric
+        prisma.agent.count({
+          where: {
+            workspaceId,
+            status: 'ACTIVE',
+            createdAt: { lt: since24h },
+          },
+        }),
+        // Violations previous 24h
+        prisma.auditEvent.count({
+          where: {
+            workspaceId,
+            eventType: 'POLICY_VIOLATION',
+            createdAt: {
+              gte: new Date(Date.now() - 48 * 60 * 60 * 1000),
+              lt: since24h,
+            },
+          },
+        }),
+      ]);
+
+      const costTodayValue = costToday._sum.costUsd ?? 0;
+      const taskRateChange = taskCountPrev1h > 0
+        ? Math.round(((taskCount1h - taskCountPrev1h) / taskCountPrev1h) * 100)
+        : 0;
+      const agentChange = agentCountPrev > 0
+        ? Math.round(((activeAgents - agentCountPrev) / agentCountPrev) * 100)
+        : 0;
+      const violationChange = violationsPrev > 0
+        ? Math.round(((policyViolations - violationsPrev) / violationsPrev) * 100)
+        : 0;
+
+      return {
+        data: {
+          activeAgents,
+          costToday: costTodayValue,
+          policyViolations,
+          tasksPerHour: taskCount1h,
+          agentChange,
+          costChange: 0, // Would need previous day cost comparison
+          violationChange,
+          taskRateChange,
+        },
+        meta: { requestId: request.id, timestamp: new Date().toISOString() },
+        error: null,
+      };
+    },
+  });
+
+  /**
    * GET /api/v1/metrics/cost
    * Cost metrics dashboard data
    */

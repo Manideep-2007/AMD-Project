@@ -1,0 +1,24 @@
+{
+  "name": "@nexusops/injection",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist node_modules"
+  },
+  "dependencies": {
+    "@nexusops/logger": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

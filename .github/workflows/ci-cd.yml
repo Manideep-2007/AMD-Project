@@ -11,7 +11,7 @@ env:
   PNPM_VERSION: '8'
 
 jobs:
-  # Lint and Type Check
+  # ── Lint & Type Check ──────────────────────
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
       - name: Type check
         run: pnpm build
 
-  # Run Tests
+  # ── Tests (Postgres + Redis) ───────────────
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -95,46 +95,151 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       
-      - name: Run migrations
-        run: echo "Skipping migrations - schema will be applied in deployment"
+      - name: Apply Prisma migrations
+        run: pnpm --filter @nexusops/db exec prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexusops_test
-          DATABASE_URL_DIRECT: postgresql://postgres:postgres@localhost:5432/nexusops_test
       
       - name: Run tests
         run: pnpm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexusops_test
           REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-test-secret-not-for-production
+          NODE_ENV: test
 
-  # Security Scan
+  # ── Rust (policy-core) ─────────────────────
+  rust:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/policy-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/policy-core
+
+      - name: cargo fmt
+        run: cargo fmt -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test
+
+  # ── Security Scan ──────────────────────────
   security:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          # Full history required so gitleaks can scan all commits, not just HEAD
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # BLOCKING: fail the pipeline on high/critical CVEs in dependencies
+      - name: pnpm audit (high+critical)
+        run: pnpm audit --audit-level=high
+
+      # BLOCKING: scan for secrets/credentials committed to source
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Set GITLEAKS_LICENSE if using the commercial edition
+          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      # OPTIONAL but non-blocking only if SNYK_TOKEN not configured
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/node@master
-        continue-on-error: true
+        # Only block if the Snyk token is configured — allow skip in forks
+        continue-on-error: ${{ secrets.SNYK_TOKEN == '' }}
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high
 
-  # Build Docker Images
+  # ── Migration Drift Check ──────────────────
+  migration-check:
+    name: Migration Drift Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexusops_drift
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Detect schema drift
+        run: |
+          pnpm --filter @nexusops/db exec prisma migrate deploy
+          pnpm --filter @nexusops/db exec prisma migrate diff \
+            --from-migrations ./packages/db/prisma/migrations \
+            --to-schema-datamodel ./packages/db/prisma/schema.prisma \
+            --shadow-database-url postgresql://postgres:postgres@localhost:5432/nexusops_drift_shadow \
+            --exit-code
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexusops_drift
+
+  # ── Build Docker Images ────────────────────
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, test]
+    needs: [lint, test, rust]
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Build API image (no push - registry not configured)
+      - name: Build API image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -144,7 +249,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
-      - name: Build Worker image (no push - registry not configured)
+      - name: Build Worker image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -154,7 +259,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
-      - name: Build Proxy image (no push - registry not configured)
+      - name: Build Proxy image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -164,12 +269,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Deploy to Staging
+  # ── Deploy to Staging ──────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build]
+    needs: [build, security]
     environment:
       name: staging
       url: https://staging.nexusops.dev
@@ -178,16 +283,30 @@ jobs:
       
       - name: Deploy to staging
         run: |
-          echo "Deploy to staging would happen here"
-          # Add your deployment script here
-          # Example: kubectl apply -f k8s/staging/
+          kubectl apply -f k8s/ --namespace staging
       
       - name: Run smoke tests
         run: |
           echo "Running smoke tests..."
           # Add smoke tests here
 
-  # Deploy to Production (manual approval required)
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 benchmark (P95 gate)
+        run: |
+          k6 run benchmarks/proxy-pipeline.js \
+            -e BASE_URL=https://staging.nexusops.dev \
+            -e API_KEY=${{ secrets.STAGING_API_KEY }}
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.sha }}
+          path: benchmarks/results/
+
+  # ── Deploy to Production (manual approval) ─
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
@@ -201,9 +320,8 @@ jobs:
       
       - name: Deploy to production
         run: |
-          echo "Deploy to production would happen here"
-          # Add your deployment script here
+          kubectl apply -f k8s/ --namespace production
       
       - name: Notify deployment
         run: |
-          echo "Production deployment complete"
+          echo "Production deployment complete — $(date -u)"

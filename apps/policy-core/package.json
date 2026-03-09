@@ -1,0 +1,31 @@
+{
+  "name": "@nexusops/policy-core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "policy-core",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "node -e \"const {spawnSync}=require('child_process');const r=spawnSync('cargo',['test','--release'],{stdio:'inherit'});if(r.error&&r.error.code==='ENOENT'){console.warn('SKIP: cargo not found \\u2014 install Rust from https://rustup.rs to run policy-core tests');process.exit(0)}process.exit(r.status||0)\"",
+    "lint": "cargo clippy -- -D warnings",
+    "clean": "cargo clean"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

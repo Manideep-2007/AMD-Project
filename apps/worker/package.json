@@ -16,6 +16,9 @@
     "@nexusops/policy": "workspace:*",
     "@nexusops/queue": "workspace:*",
     "@nexusops/types": "workspace:*",
+    "@nexusops/events": "workspace:*",
+    "@nexusops/blast-radius": "workspace:*",
+    "@nexusops/injection": "workspace:*",
     "axios": "^1.7.9"
   },
   "devDependencies": {

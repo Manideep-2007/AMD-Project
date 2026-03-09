@@ -6,8 +6,10 @@ services:
     image: postgres:16-alpine
     container_name: nexusops-postgres
     restart: unless-stopped
-    ports:
-      - '5432:5432'
+    # No host port binding — reachable only on the internal Docker network.
+    # Use `docker exec` or a bastion host for direct DB access.
+    expose:
+      - '5432'
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -25,8 +27,9 @@ services:
     image: redis:7-alpine
     container_name: nexusops-redis
     restart: unless-stopped
-    ports:
-      - '6379:6379'
+    # No host port binding — reachable only on the internal Docker network.
+    expose:
+      - '6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -60,62 +63,117 @@ services:
       - redis
 
   # API Service
-  # api:
-  #   build:
-  #     context: .
-  #     dockerfile: ./apps/api/Dockerfile
-  #   container_name: nexusops-api
-  #   restart: unless-stopped
-  #   ports:
-  #     - '3001:3001'
-  #   environment:
-  #     NODE_ENV: development
-  #     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
-  #     REDIS_URL: redis://redis:6379
-  #     JWT_SECRET: ${JWT_SECRET}
-  #     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   volumes:
-  #     - ./apps/api:/app/apps/api
-  #     - ./packages:/app/packages
-  #     - /app/node_modules
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: nexusops-api
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in .env}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET must be set in .env}
+      PROXY_INTERNAL_SECRET: ${PROXY_INTERNAL_SECRET:?PROXY_INTERNAL_SECRET must be set in .env}
+      PROXY_INTERNAL_URL: http://proxy:3003
+      DB_URL_ENCRYPTION_KEY: ${DB_URL_ENCRYPTION_KEY:?DB_URL_ENCRYPTION_KEY must be set in .env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      # SSO/OIDC — set in .env; leave empty to disable the respective provider
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      OIDC_REDIRECT_BASE_URL: ${OIDC_REDIRECT_BASE_URL:-http://localhost:3001}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:3001/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+      - internal
 
   # Worker Service
-  # worker:
-  #   build:
-  #     context: .
-  #     dockerfile: ./apps/worker/Dockerfile
-  #   container_name: nexusops-worker
-  #   restart: unless-stopped
-  #   environment:
-  #     NODE_ENV: development
-  #     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
-  #     REDIS_URL: redis://redis:6379
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   volumes:
-  #     - ./apps/worker:/app/apps/worker
-  #     - ./packages:/app/packages
-  #     - /app/node_modules
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    container_name: nexusops-worker
+    restart: unless-stopped
+    ports:
+      - '3004:3004'
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
+      REDIS_URL: redis://redis:6379
+      PROXY_INTERNAL_SECRET: ${PROXY_INTERNAL_SECRET:?PROXY_INTERNAL_SECRET must be set in .env}
+      PROXY_URL: http://proxy:3003
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
+      WORKER_HEALTH_PORT: 3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:3004/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+      - internal
 
-  # Dashboard (Frontend)
-  # dashboard:
-  #   build:
-  #     context: .
-  #     dockerfile: ./apps/dashboard/Dockerfile
-  #   container_name: nexusops-dashboard
-  #   restart: unless-stopped
-  #   ports:
-  #     - '3000:3000'
-  #   environment:
-  #     VITE_API_URL: http://localhost:3001
-  #     VITE_WS_URL: ws://localhost:3001
-  #   volumes:
-  #     - ./apps/dashboard:/app
-  #     - /app/node_modules
+  # Proxy Service
+  proxy:
+    build:
+      context: .
+      dockerfile: ./apps/proxy/Dockerfile
+    container_name: nexusops-proxy
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
+      REDIS_URL: redis://redis:6379
+      PROXY_INTERNAL_SECRET: ${PROXY_INTERNAL_SECRET:?PROXY_INTERNAL_SECRET must be set in .env}
+      DB_URL_ENCRYPTION_KEY: ${DB_URL_ENCRYPTION_KEY:?DB_URL_ENCRYPTION_KEY must be set in .env}
+      API_URL: http://api:3001
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      JIRA_URL: ${JIRA_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    depends_on:
+      - api
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:3003/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - internal
 
 volumes:
   postgres_data:
@@ -124,3 +182,6 @@ volumes:
 networks:
   default:
     name: nexusops-network
+  internal:
+    name: nexusops-internal
+    internal: true

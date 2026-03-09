@@ -14,7 +14,11 @@
     "declaration": true,
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "baseUrl": ".",
+    "paths": {
+      "@prisma/client": ["../../node_modules/.prisma/client"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

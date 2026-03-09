@@ -1,0 +1,24 @@
+{
+  "name": "@nexusops/sdk",
+  "version": "0.1.0",
+  "description": "NexusOps TypeScript SDK — agent registration, policy-gated tool calls, Ed25519 signing, and real-time event streaming",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "eventemitter3": "^5.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

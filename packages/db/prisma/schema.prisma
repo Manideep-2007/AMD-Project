@@ -27,10 +27,23 @@ enum TaskStatus {
   PENDING
   QUEUED
   RUNNING
+  PENDING_APPROVAL
   COMPLETED
   FAILED
   ESCALATED
   CANCELLED
+}
+
+enum Provider {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+  AWS_BEDROCK
+  AZURE_OPENAI
+  MISTRAL
+  OLLAMA
+  ON_PREMISE
+  CUSTOM
 }
 
 enum AgentStatus {
@@ -73,30 +86,59 @@ enum DataClassification {
 // ================================
 
 model Workspace {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                       String   @id @default(cuid())
+  name                     String
+  slug                     String   @unique
+  financialExposureConfig  Json?    // Customer-provided data value tags + hourly dev rate
+  dataRegion               String?  // US, EU, APAC — data residency enforcement
+  plan                     String   @default("free")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   // Relations
-  users       WorkspaceUser[]
-  agents      Agent[]
-  tasks       Task[]
-  policies    PolicyRule[]
-  toolCalls   ToolCall[]
-  auditEvents AuditEvent[]
-  budgets     Budget[]
-  apiKeys     ApiKey[]
+  users               WorkspaceUser[]
+  agents              Agent[]
+  tasks               Task[]
+  policies            PolicyRule[]
+  toolCalls           ToolCall[]
+  auditEvents         AuditEvent[]
+  budgets             Budget[]
+  apiKeys             ApiKey[]
+  complianceArtifacts ComplianceArtifact[]
+  metrics             Metric[]
+  agentMemoryEntries  AgentMemoryEntry[]
+  baselines           BehaviouralBaseline[]
+  invitations         WorkspaceInvitation[]
 
   @@index([slug])
   @@map("workspaces")
 }
 
+model WorkspaceInvitation {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  email         String
+  role          UserRole  @default(VIEWER)
+  token         String    @unique // Secure random token for accept link
+  invitedById   String    // The user who sent the invitation
+  expiresAt     DateTime  // Token expiry (e.g. 7 days)
+  acceptedAt    DateTime? // Null until accepted
+  revokedAt     DateTime? // Null unless revoked
+  createdAt     DateTime  @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy     User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([token])
+  @@index([email])
+  @@map("workspace_invitations")
+}
+
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
-  passwordHash  String
+  passwordHash  String?  // Nullable: OIDC/OAuth users authenticate via OAuthAccount
   name          String?
   avatarUrl     String?
   emailVerified Boolean  @default(false)
@@ -109,9 +151,27 @@ model User {
   refreshTokens RefreshToken[]
   auditEvents   AuditEvent[]
   taskApprovals TaskApproval[]
+  oauthAccounts OAuthAccount[]
+  sentInvitations WorkspaceInvitation[]
 
   @@index([email])
   @@map("users")
+}
+
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String   // 'google' | 'github' | 'microsoft'
+  providerAccountId String   // 'sub' claim from the OIDC ID token
+  email             String?  // Email reported by the provider
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }
 
 model WorkspaceUser {
@@ -155,6 +215,8 @@ model ApiKey {
   keyPrefix   String   // First 8 chars for UI display
   lastUsedAt  DateTime?
   expiresAt   DateTime?
+  rateLimit   Int?     // Per-minute rate limit (null = default 1000)
+  scope       String   @default("full_access") // full_access, read_only, agent_only, admin
   createdAt   DateTime @default(now())
   revokedAt   DateTime?
 
@@ -170,26 +232,38 @@ model ApiKey {
 // ================================
 
 model Agent {
-  id              String      @id @default(cuid())
-  workspaceId     String
-  name            String
-  description     String?
-  version         String
-  status          AgentStatus @default(IDLE)
-  config          Json        // Agent-specific config
-  toolPermissions String[]    // Allowlist of tool types
-  maxTokens       Int?
-  maxCostUsd      Float?
-  maxExecutionMs  Int?
-  maxDepth        Int         @default(10)
-  heartbeatAt     DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  terminatedAt    DateTime?
+  id                         String      @id @default(cuid())
+  workspaceId                String
+  name                       String
+  description                String?
+  publicKey                  String?     // Ed25519 public key for identity verification
+  version                    String
+  status                     AgentStatus @default(IDLE)
+  config                     Json        // Agent-specific config (model, temperature, etc.)
+  toolPermissions            String[]    // Allowlist of tool types
+  maxTokens                  Int?
+  maxCostUsd                 Float?
+  maxExecutionMs             Int?
+  maxDepth                   Int         @default(10)
+  heartbeatAt                DateTime?
+  // Blast Radius fields
+  blastRadiusScore           Float?      // 0-100 normalised score
+  blastRadiusMaxDamageUsd    Float?      // Maximum theoretical damage in USD
+  blastRadiusGovernedDamageUsd Float?    // Maximum actual damage given budget limits
+  blastRadiusLastCalculatedAt DateTime?
+  // Safety Schema for SQL gating
+  safetySchema               Json?       // Defines permitted SQL operations per agent
+  // Customer database connection (encrypted at rest via AES-256-GCM)
+  customerDatabaseUrl        String?     // Encrypted connection string for customer's DB
+  customerDatabaseConfig     Json?       // Connection pool config (max, idle timeout, etc.)
+  createdAt                  DateTime    @default(now())
+  updatedAt                  DateTime    @updatedAt
+  terminatedAt               DateTime?
 
   workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks           Task[]
   toolCalls       ToolCall[]
+  budgets         Budget[]
 
   @@index([workspaceId])
   @@index([status])
@@ -229,17 +303,22 @@ model Task {
 }
 
 model TaskApproval {
-  id          String   @id @default(cuid())
-  taskId      String
-  userId      String
-  approved    Boolean
-  reason      String?
-  createdAt   DateTime @default(now())
+  id                String     @id @default(cuid())
+  taskId            String
+  userId            String?    // null if auto-denied by timeout
+  approved          Boolean    @default(false)
+  reason            String?
+  blastRadiusDelta  Float?     // Financial impact of approving this specific action
+  riskScore         Float?     // Anomalous activity score at time of escalation
+  timeoutAt         DateTime?  // Auto-deny deadline
+  decidedAt         DateTime?
+  createdAt         DateTime   @default(now())
 
-  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task              Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user              User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([taskId])
+  @@index([timeoutAt])
   @@map("task_approvals")
 }
 
@@ -254,12 +333,19 @@ model ToolCall {
   agentId         String
   toolType        ToolType
   toolMethod      String    // e.g., "github.createPR", "jira.createIssue"
+  provider        String?   // OPENAI, ANTHROPIC, AWS_BEDROCK, etc. for LLM calls
   input           Json
   output          Json?
   error           Json?
   blocked         Boolean   @default(false)
   blockReason     String?
+  model           String?   // LLM model name (gpt-4o, claude-3, etc.)
+  inputTokens     Int       @default(0)
+  outputTokens    Int       @default(0)
+  costUsd         Float     @default(0)
+  tokenCount      Int       @default(0)
   durationMs      Int?
+  policyDecision  String?   // ALLOW, DENY, ESCALATE_TO_HUMAN
   createdAt       DateTime  @default(now())
 
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -325,20 +411,24 @@ model PolicyEvaluation {
 // ================================
 
 model Budget {
-  id              String   @id @default(cuid())
-  workspaceId     String
-  agentId         String?  // null = workspace-level budget
-  maxTokens       Int?
-  maxCostUsd      Float?
-  periodStart     DateTime
-  periodEnd       DateTime
-  currentTokens   Int      @default(0)
-  currentCostUsd  Float    @default(0)
-  alertThreshold  Float?   // Alert at X% of budget
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  workspaceId               String
+  agentId                   String?  // null = workspace-level budget
+  maxTokens                 Int?
+  maxCostUsd                Float?
+  velocityLimitUsdPerMinute Float?   // Max spend rate per minute
+  workspaceDailyLimitUsd    Float?   // Max cumulative workspace spend per day
+  periodStart               DateTime
+  periodEnd                 DateTime
+  currentTokens             Int      @default(0)
+  currentCostUsd            Float    @default(0)
+  alertThreshold            Float?   // Alert at X% of budget
+  autoHalt                  Boolean  @default(true) // Halt agent when budget exceeded
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace                 Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent                     Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([agentId])
@@ -350,25 +440,32 @@ model Budget {
 // ================================
 
 model AuditEvent {
-  id          String   @id @default(cuid())
-  workspaceId String
-  userId      String?
-  eventType   String   // e.g., "agent.created", "task.cancelled", "policy.updated"
-  entityType  String   // e.g., "agent", "task", "policy"
-  entityId    String?
-  action      String   // CRUD operation
-  metadata    Json
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  workspaceId     String
+  userId          String?
+  eventType       String   // e.g., "agent.created", "task.cancelled", "policy.updated"
+  entityType      String   // e.g., "agent", "task", "policy"
+  entityId        String?
+  action          String   // CRUD operation
+  metadata        Json
+  ipAddress       String?
+  userAgent       String?
+  // Cryptographic chain integrity fields
+  contentHash     String?  // SHA-3-256 hash of event content
+  previousHash    String?  // Hash of previous event in workspace chain
+  chainIndex      Int      @default(0)
+  agentSignature  String?  // Ed25519 signature if agent-originated
+  provider        String?  // OPENAI, ANTHROPIC, AWS_BEDROCK etc. for cross-cloud consolidation
+  createdAt       DateTime @default(now())
 
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([userId])
   @@index([eventType])
   @@index([createdAt])
+  @@index([chainIndex])
   @@map("audit_events")
 }
 
@@ -385,8 +482,110 @@ model Metric {
   tags        Json?    // Additional metadata
   timestamp   DateTime @default(now())
 
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@index([workspaceId])
   @@index([metricName])
   @@index([timestamp])
+  @@index([workspaceId, metricName, timestamp])
   @@map("metrics")
+}
+
+// ================================
+// COMPLIANCE ARTIFACTS (Immutable Evidence Vault)
+// ================================
+
+model ComplianceArtifact {
+  id                        String             @id @default(cuid())
+  workspaceId               String
+  taskId                    String
+  agentId                   String
+  // Component 1: User Intent
+  userPrompt                String
+  submittedByUserId         String?
+  submittedAt               DateTime
+  // Component 2: Agent Reasoning Chain
+  reasoningChain            Json?              // [{step: number, thought: string, action: string}]
+  reasoningCapturedAt       DateTime?
+  // Component 3: Context Retrieved
+  contextRefs               Json?              // [{source: string, contentHash: string, classification: string}]
+  // Component 4: Policy Evaluation Record
+  policyDecision            PolicyAction
+  policyRuleId              String?
+  policyVersion             Int                @default(1)
+  policyInputHash           String?
+  // Component 5: System Execution Record
+  toolCallId                String?
+  requestPayloadHash        String?
+  responsePayloadHash       String?
+  executionDurationMs       Int?
+  costUsd                   Float              @default(0)
+  dataClassificationTouched DataClassification @default(PUBLIC)
+  provider                  String?            // OPENAI, ANTHROPIC, AWS_BEDROCK etc.
+  // Component 6: Integrity Seal
+  contentHash               String             // SHA-3-256 of components 1-5 concatenated
+  previousHash              String?            // Hash of previous artifact in workspace chain
+  chainIndex                Int                @default(0)
+  agentSignature            String?            // Ed25519 of contentHash using agent private key
+  timestampAuthority        String?            // RFC 3161 timestamp token (base64)
+  anchorTxHash              String?            // Ethereum tx when Merkle-anchored
+  anchorBlockNumber         BigInt?
+  createdAt                 DateTime           @default(now())
+
+  workspace                 Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([taskId])
+  @@index([agentId])
+  @@index([chainIndex])
+  @@index([createdAt])
+  @@index([contentHash])
+  @@map("compliance_artifacts")
+}
+
+// ================================
+// AGENT MEMORY GOVERNANCE (Phase 2)
+// ================================
+
+model AgentMemoryEntry {
+  id                  String             @id @default(cuid())
+  workspaceId         String
+  agentId             String
+  key                 String
+  value               Json
+  dataClassification  DataClassification @default(PUBLIC)
+  retentionDays       Int?
+  expiresAt           DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@index([dataClassification])
+  @@index([expiresAt])
+  @@map("agent_memory_entries")
+}
+
+// ================================
+// BEHAVIOURAL BASELINES (Phase 3+)
+// ================================
+
+model BehaviouralBaseline {
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  agentId             String
+  dimensions          Json     // 40 behavioural dimensions with rolling statistics
+  sampleCount         Int      @default(0)
+  lastUpdated         DateTime @default(now())
+  driftThreshold      Float    @default(2.0) // Standard deviations before flag
+  modelVersion        String   @default("v1")
+
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, agentId])
+  @@index([workspaceId])
+  @@index([agentId])
+  @@map("behavioural_baselines")
 }

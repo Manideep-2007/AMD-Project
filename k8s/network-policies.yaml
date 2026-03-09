@@ -1,0 +1,165 @@
+---
+# NetworkPolicy: API can talk to postgres, redis, proxy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-network-policy
+  namespace: nexusops
+spec:
+  podSelector:
+    matchLabels:
+      app: nexusops-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Accept traffic from Ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 3001
+  egress:
+    # To PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-postgres
+      ports:
+        - port: 5432
+    # To Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-redis
+      ports:
+        - port: 6379
+    # To Proxy (internal)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-proxy
+      ports:
+        - port: 3003
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # External HTTPS (email, OIDC, model providers)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+---
+# NetworkPolicy: Proxy — only reachable from API and Worker
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: proxy-network-policy
+  namespace: nexusops
+spec:
+  podSelector:
+    matchLabels:
+      app: nexusops-proxy
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: nexusops-api
+        - podSelector:
+            matchLabels:
+              app: nexusops-worker
+      ports:
+        - port: 3003
+  egress:
+    # To PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-postgres
+      ports:
+        - port: 5432
+    # To Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-redis
+      ports:
+        - port: 6379
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # External (model providers, customer DBs)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+        - port: 5432
+---
+# NetworkPolicy: Worker — similar to API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: worker-network-policy
+  namespace: nexusops
+spec:
+  podSelector:
+    matchLabels:
+      app: nexusops-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # To PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-postgres
+      ports:
+        - port: 5432
+    # To Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-redis
+      ports:
+        - port: 6379
+    # To Proxy (for tool execution)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexusops-proxy
+      ports:
+        - port: 3003
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

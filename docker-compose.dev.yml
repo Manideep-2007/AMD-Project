@@ -1,0 +1,48 @@
+# docker-compose.dev.yml — Development overrides for docker-compose.yml
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# What this adds over production:
+#   - Host port bindings for Postgres (5432) and Redis (6379) so local tools
+#     (psql, redis-cli, Prisma Studio, TablePlus) can connect directly.
+#   - Live source-code volume mounts so ts-node/tsx picks up edits without
+#     rebuilding the image on every change.
+#   - NODE_ENV forced to 'development'.
+#
+# Never use this file in staging or production.
+
+version: '3.9'
+
+services:
+  postgres:
+    ports:
+      - '5432:5432'
+
+  redis:
+    ports:
+      - '6379:6379'
+
+  api:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+
+  worker:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./apps/worker:/app/apps/worker
+      - ./packages:/app/packages
+      - /app/node_modules
+
+  proxy:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./apps/proxy:/app/apps/proxy
+      - ./packages:/app/packages
+      - /app/node_modules

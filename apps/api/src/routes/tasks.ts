@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { prisma, TaskStatus, type Prisma } from '@nexusops/db';
 import { queueManager, JobType } from '@nexusops/queue';
+import { appendAuditEvent } from '@nexusops/events';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 
@@ -9,6 +10,13 @@ const createTaskSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   input: z.record(z.unknown()),
+});
+
+const listTasksQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  status: z.string().optional(),
+  agentId: z.string().optional(),
 });
 
 export const tasksRoutes: FastifyPluginAsync = async (app) => {
@@ -81,7 +89,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', {
     onRequest: [app.authenticate],
     handler: async (request, reply) => {
-      const { page = 1, limit = 50, status, agentId } = request.query as any;
+      const { page, limit, status, agentId } = listTasksQuerySchema.parse(request.query);
 
       const where = {
         workspaceId: request.workspaceId!,
@@ -172,7 +180,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
    * Cancel a running task
    */
   app.post('/:id/cancel', {
-    onRequest: [app.authenticate],
+    onRequest: [app.authenticate, app.checkRole(['OWNER', 'ADMIN', 'OPERATOR'])],
     handler: async (request, reply) => {
       const { id } = request.params as { id: string };
 
@@ -217,17 +225,15 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      // Audit log
-      await prisma.auditEvent.create({
-        data: {
-          workspaceId: request.workspaceId!,
-          userId: request.user?.userId,
-          eventType: 'task.cancelled',
-          entityType: 'task',
-          entityId: task.id,
-          action: 'UPDATE',
-          metadata: { taskName: task.name },
-        },
+      // Audit log (SHA-3 chained — never bypass with prisma.auditEvent.create)
+      await appendAuditEvent({
+        workspaceId: request.workspaceId!,
+        userId: request.user?.userId,
+        eventType: 'task.cancelled',
+        entityType: 'task',
+        entityId: task.id,
+        action: 'UPDATE',
+        metadata: { taskName: task.name },
       });
 
       return {
@@ -246,7 +252,11 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     onRequest: [app.authenticate, app.checkRole(['OWNER', 'ADMIN', 'OPERATOR'])],
     handler: async (request, reply) => {
       const { id } = request.params as { id: string };
-      const { approved, reason } = request.body as { approved: boolean; reason?: string };
+      const approveSchema = z.object({
+        approved: z.boolean(),
+        reason: z.string().min(1).max(1000).optional(),
+      });
+      const { approved, reason } = approveSchema.parse(request.body);
 
       const task = await prisma.task.findFirst({
         where: {
@@ -310,17 +320,15 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      // Audit log
-      await prisma.auditEvent.create({
-        data: {
-          workspaceId: request.workspaceId!,
-          userId: request.user?.userId,
-          eventType: approved ? 'task.approved' : 'task.rejected',
-          entityType: 'task',
-          entityId: task.id,
-          action: 'UPDATE',
-          metadata: { taskName: task.name, reason },
-        },
+      // Audit log (SHA-3 chained — never bypass with prisma.auditEvent.create)
+      await appendAuditEvent({
+        workspaceId: request.workspaceId!,
+        userId: request.user?.userId,
+        eventType: approved ? 'task.approved' : 'task.rejected',
+        entityType: 'task',
+        entityId: task.id,
+        action: 'UPDATE',
+        metadata: { taskName: task.name, reason },
       });
 
       return {

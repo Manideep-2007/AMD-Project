@@ -17,7 +17,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Export all Prisma types and enums
 export * from '@prisma/client';
-export type { Prisma } from '@prisma/client';
 
 // Explicitly re-export enums for better TypeScript support
 export {

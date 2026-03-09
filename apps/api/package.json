@@ -8,21 +8,29 @@
     "build": "tsc",
     "lint": "tsc --noEmit",
     "start": "node dist/index.js",
+    "test": "vitest run",
     "clean": "rimraf dist node_modules"
   },
   "dependencies": {
     "@nexusops/db": "workspace:*",
     "@nexusops/logger": "workspace:*",
+    "@nexusops/telemetry": "workspace:*",
     "@nexusops/policy": "workspace:*",
     "@nexusops/queue": "workspace:*",
     "@nexusops/types": "workspace:*",
+    "@nexusops/events": "workspace:*",
+    "@nexusops/blast-radius": "workspace:*",
+    "@nexusops/injection": "workspace:*",
+    "@nexusops/crypto": "workspace:*",
     "@fastify/auth": "^5.0.0",
+    "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^10.0.0",
     "@fastify/helmet": "^12.0.0",
     "@fastify/jwt": "^9.0.0",
     "@fastify/rate-limit": "^10.0.0",
     "@fastify/websocket": "^11.0.0",
     "fastify": "^5.0.0",
+    "fastify-plugin": "^5.0.0",
     "zod": "^3.25.0",
     "bcrypt": "^5.1.1",
     "nanoid": "^5.0.0"
@@ -33,6 +41,7 @@
     "@types/ws": "^8.5.10",
     "rimraf": "^5.0.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   }
 }
