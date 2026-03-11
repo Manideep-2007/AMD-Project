@@ -116,7 +116,6 @@ impl Default for PolicyCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::PolicyConditions;
 
     #[test]
     fn test_load_and_retrieve() {

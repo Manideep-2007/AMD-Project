@@ -104,6 +104,11 @@ jobs:
         run: pnpm --filter @nexusops/db exec prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexusops_test
+
+      - name: Generate Prisma client
+        run: pnpm --filter @nexusops/db run generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexusops_test
       
       - name: Run tests
         run: pnpm test
@@ -229,8 +234,8 @@ jobs:
         run: |
           pnpm --filter @nexusops/db exec prisma migrate deploy
           pnpm --filter @nexusops/db exec prisma migrate diff \
-            --from-migrations ./packages/db/prisma/migrations \
-            --to-schema-datamodel ./packages/db/prisma/schema.prisma \
+            --from-migrations ./prisma/migrations \
+            --to-schema-datamodel ./prisma/schema.prisma \
             --shadow-database-url postgresql://postgres:postgres@localhost:5432/nexusops_drift_shadow \
             --exit-code
         env:

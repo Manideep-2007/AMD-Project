@@ -206,11 +206,12 @@ fn extract_tables(stmt: &Statement) -> Vec<String> {
             }
         }
         Statement::Delete(ref del) => {
-            if let Some(ref from) = del.from {
-                for item in from {
-                    if let TableFactor::Table { ref name, .. } = item.relation {
-                        tables.push(name.to_string());
-                    }
+            let items = match &del.from {
+                FromTable::WithFromKeyword(items) | FromTable::WithoutKeyword(items) => items,
+            };
+            for item in items {
+                if let TableFactor::Table { ref name, .. } = item.relation {
+                    tables.push(name.to_string());
                 }
             }
         }
