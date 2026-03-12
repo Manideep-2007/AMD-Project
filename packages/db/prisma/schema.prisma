@@ -108,6 +108,7 @@ model Workspace {
   agentMemoryEntries  AgentMemoryEntry[]
   baselines           BehaviouralBaseline[]
   invitations         WorkspaceInvitation[]
+  eccSessions         ECCSession[]
 
   @@index([slug])
   @@map("workspaces")
@@ -266,6 +267,7 @@ model Agent {
 
   @@index([workspaceId])
   @@index([status])
+  @@unique([workspaceId, name])
   @@map("agents")
 }
 
@@ -587,4 +589,36 @@ model BehaviouralBaseline {
   @@index([workspaceId])
   @@index([agentId])
   @@map("behavioural_baselines")
+}
+
+// ================================
+// ECC INTEGRATION (Development Intelligence)
+// ================================
+
+// Tracks ECC-managed development agent sessions
+model ECCSession {
+  id          String    @id @default(cuid())
+  workspaceId String
+  sessionId   String?   // CLAUDE_SESSION_ID (last 8 chars)
+  agentId     String    // ecc-{agentName}
+  status      String    @default("active") // active | completed | errored
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  projectHash String?   // SHA-256 of project path
+  hookProfile String    @default("standard")
+  eventCount  Int       @default(0)
+  lastEventAt DateTime  @default(now())
+  errorMessage String?  // Populated when status = errored
+  stopReason   String?  // normal | error | timeout | user_cancel
+  totalCostUsd Float    @default(0) // Accumulated cost for this session
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, sessionId])
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([agentId])
+  @@index([status])
+  @@map("ecc_sessions")
 }

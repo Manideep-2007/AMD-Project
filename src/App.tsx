@@ -21,6 +21,7 @@ import Intelligence from "@/pages/Intelligence";
 import Onboarding from "@/pages/Onboarding";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
+import ECC from "@/pages/ECC";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,6 +117,7 @@ const App = () => (
                   <Route path="/approvals" element={<Approvals />} />
                   <Route path="/security" element={<Security />} />
                   <Route path="/intelligence" element={<Intelligence />} />
+                  <Route path="/ecc" element={<ECC />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/onboarding" element={<Onboarding />} />
                 </Route>

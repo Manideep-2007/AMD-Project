@@ -59,7 +59,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
           ...(body.name !== undefined && { name: body.name }),
           ...(body.dataRegion !== undefined && { dataRegion: body.dataRegion }),
           ...(body.financialExposureConfig !== undefined && {
-            financialExposureConfig: body.financialExposureConfig as any,
+            financialExposureConfig: body.financialExposureConfig as object,
           }),
         },
       });
@@ -147,7 +147,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
         data: {
           workspaceId: wsId,
           email,
-          role: role as any,
+          role: role as 'ADMIN' | 'OPERATOR' | 'VIEWER',
           token,
           invitedById: inviterId,
           expiresAt,
@@ -291,7 +291,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
 
       const member = await prisma.workspaceUser.updateMany({
         where: { workspaceId: wsId, userId },
-        data: { role: role as any },
+        data: { role: role as 'ADMIN' | 'OPERATOR' | 'VIEWER' },
       });
 
       return {

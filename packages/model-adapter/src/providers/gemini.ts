@@ -51,10 +51,13 @@ export class GeminiProvider implements ModelProvider {
       body.systemInstruction = { parts: [{ text: systemInstruction.content }] };
     }
 
-    const url = `${this.baseUrl}/models/${request.model}:generateContent?key=${this.apiKey}`;
+    const url = `${this.baseUrl}/models/${request.model}:generateContent`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': this.apiKey,
+      },
       body: JSON.stringify(body),
     });
 
@@ -104,10 +107,13 @@ export class GeminiProvider implements ModelProvider {
       generationConfig: { maxOutputTokens: request.maxTokens ?? 4096 },
     };
 
-    const url = `${this.baseUrl}/models/${request.model}:streamGenerateContent?key=${this.apiKey}&alt=sse`;
+    const url = `${this.baseUrl}/models/${request.model}:streamGenerateContent?alt=sse`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': this.apiKey,
+      },
       body: JSON.stringify(body),
     });
 
@@ -141,7 +147,9 @@ export class GeminiProvider implements ModelProvider {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/models?key=${this.apiKey}`);
+      const res = await fetch(`${this.baseUrl}/models`, {
+        headers: { 'x-goog-api-key': this.apiKey },
+      });
       return res.ok;
     } catch {
       return false;

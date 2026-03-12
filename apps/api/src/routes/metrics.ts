@@ -111,7 +111,7 @@ export const metricsRoutes: FastifyPluginAsync = async (app) => {
     onRequest: [app.authenticate],
     handler: async (request, reply) => {
       const workspaceId = request.workspaceId!;
-      const { period = '24h' } = request.query as any;
+      const { period = '24h' } = request.query as { period?: string };
 
       let since: Date;
       switch (period) {

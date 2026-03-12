@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { prisma } from '@nexusops/db';
+import { prisma, ToolType } from '@nexusops/db';
 import { z } from 'zod';
 import { appendAuditEvent } from '@nexusops/events';
 import { createLogger } from '@nexusops/logger';
@@ -168,11 +168,13 @@ export const toolsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/calls', {
     onRequest: [app.authenticate],
     handler: async (request, reply) => {
-      const { page = 1, limit = 50, toolType, agentId, taskId, blocked } = request.query as any;
+      const { page = 1, limit = 50, toolType, agentId, taskId, blocked } = request.query as {
+        page?: number; limit?: number; toolType?: string; agentId?: string; taskId?: string; blocked?: string;
+      };
 
       const where = {
         workspaceId: request.workspaceId!,
-        ...(toolType && { toolType }),
+        ...(toolType && { toolType: toolType as ToolType }),
         ...(agentId && { agentId }),
         ...(taskId && { taskId }),
         ...(blocked !== undefined && { blocked: blocked === 'true' }),

@@ -91,6 +91,7 @@ export enum JobType {
   EVALUATE_POLICY = 'evaluate_policy',
   UPDATE_METRICS = 'update_metrics',
   SEND_NOTIFICATION = 'send_notification',
+  ECC_INSTINCT_REFRESH = 'ecc_instinct_refresh',
 }
 
 export interface JobData {

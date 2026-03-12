@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   Lock,
   Brain,
+  Code2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -42,6 +43,7 @@ const navGovernance = [
   { title: "Approvals", url: "/approvals", icon: ShieldAlert, badge: true },
   { title: "Security", url: "/security", icon: Lock },
   { title: "Intelligence", url: "/intelligence", icon: Brain },
+  { title: "Dev Intelligence", url: "/ecc", icon: Code2 },
 ];
 
 const navSystem = [

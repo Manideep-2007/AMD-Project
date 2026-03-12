@@ -30,7 +30,7 @@
     "@nexusops/telemetry": "workspace:*",
     "@nexusops/types": "workspace:*",
     "bcrypt": "^5.1.1",
-    "fastify": "^5.0.0",
+    "fastify": "^5.8.2",
     "fastify-plugin": "^5.0.0",
     "jsonwebtoken": "^9.0.3",
     "nanoid": "^5.0.0",

@@ -112,7 +112,7 @@ export const securityRoutes: FastifyPluginAsync = async (app) => {
     onRequest: [app.authenticate],
     handler: async (request) => {
       const wsId = request.workspaceId!;
-      const limit = Math.min(Number((request.query as any).limit) || 15, 50);
+      const limit = Math.min(Number((request.query as { limit?: string }).limit) || 15, 50);
 
       const events = await prisma.auditEvent.findMany({
         where: { workspaceId: wsId },
@@ -165,7 +165,9 @@ export const securityRoutes: FastifyPluginAsync = async (app) => {
   app.get('/compliance-artifacts', {
     onRequest: [app.authenticate],
     handler: async (request) => {
-      const { page = 1, limit = 25, taskId, agentId } = request.query as any;
+      const { page = 1, limit = 25, taskId, agentId } = request.query as {
+        page?: number; limit?: number; taskId?: string; agentId?: string;
+      };
 
       const where: any = { workspaceId: request.workspaceId! };
       if (taskId) where.taskId = taskId;

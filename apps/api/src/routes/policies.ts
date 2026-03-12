@@ -66,7 +66,7 @@ export const policiesRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', {
     onRequest: [app.authenticate],
     handler: async (request, reply) => {
-      const { page = 1, limit = 50, enabled } = request.query as any;
+      const { page = 1, limit = 50, enabled } = request.query as { page?: number; limit?: number; enabled?: string };
 
       const where = {
         workspaceId: request.workspaceId!,

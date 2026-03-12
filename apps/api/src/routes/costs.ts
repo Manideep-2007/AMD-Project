@@ -41,7 +41,9 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (request, reply) => {
-    const { page = 1, limit = 50, agentId, provider, from, to } = request.query as any;
+    const { page = 1, limit = 50, agentId, provider, from, to } = request.query as {
+      page?: number; limit?: number; agentId?: string; provider?: string; from?: string; to?: string;
+    };
 
     const where: Record<string, any> = { workspaceId: request.workspaceId! };
     if (agentId) where.agentId = agentId;
@@ -77,7 +79,7 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
     ]);
 
     return reply.send({
-      data: events.map((e: any) => ({
+      data: events.map((e) => ({
         id: e.id,
         agentId: e.agentId,
         agentName: e.agent?.name || 'Unknown',
@@ -112,7 +114,7 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (request, reply) => {
-    const { period = 'today' } = request.query as any;
+    const { period = 'today' } = request.query as { period?: string };
 
     const now = new Date();
     let periodStart: Date;
@@ -171,7 +173,7 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
       const tokens = (tc.inputTokens || 0) + (tc.outputTokens || 0);
 
       // By agent
-      const agentEntry = agentCosts.get(tc.agentId) || { name: (tc.agent as any)?.name || 'Unknown', cost: 0 };
+      const agentEntry = agentCosts.get(tc.agentId) || { name: (tc.agent as { name?: string } | null)?.name || 'Unknown', cost: 0 };
       agentEntry.cost += cost;
       agentCosts.set(tc.agentId, agentEntry);
 
@@ -324,7 +326,7 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (request, reply) => {
-    const { groupBy = 'agent', from, to } = request.query as any;
+    const { groupBy = 'agent', from, to } = request.query as { groupBy?: string; from?: string; to?: string };
 
     const where: Record<string, any> = { workspaceId: request.workspaceId! };
     if (from || to) {
@@ -375,7 +377,7 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
           break;
         default: // agent
           key = tc.agentId;
-          label = (tc.agent as any)?.name || tc.agentId;
+          label = (tc.agent as { name?: string } | null)?.name || tc.agentId;
       }
 
       const bucket = buckets.get(key) || { label, cost: 0, tokens: 0, requests: 0 };

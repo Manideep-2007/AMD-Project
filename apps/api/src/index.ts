@@ -27,6 +27,7 @@ import { settingsRoutes } from './routes/settings';
 import { onboardingRoutes } from './routes/onboarding';
 import { oidcRoutes } from './routes/oidc';
 import { workspaceRoutes } from './routes/workspace';
+import { eccRoutes } from './routes/ecc';
 import { wsHandler } from './websocket';
 import { policyEngine } from '@nexusops/policy';
 import { prisma } from '@nexusops/db';
@@ -62,15 +63,25 @@ async function start() {
     credentials: true,
   });
 
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || jwtSecret.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters');
+  }
+
+  const cookieSecret = process.env.COOKIE_SECRET || jwtSecret;
+  if (cookieSecret.length < 32) {
+    throw new Error('COOKIE_SECRET must be at least 32 characters');
+  }
+
   await app.register(jwt, {
-    secret: process.env.JWT_SECRET!,
+    secret: jwtSecret,
     sign: {
       expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m',
     },
   });
 
   await app.register(cookie, {
-    secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET!,
+    secret: cookieSecret,
   });
 
   // Rate limiting — use Redis store in production, in-memory for dev
@@ -123,6 +134,7 @@ async function start() {
   await app.register(onboardingRoutes, { prefix: '/api/v1/settings' });
   await app.register(oidcRoutes, { prefix: '/api/v1/auth/oidc' });
   await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' });
+  await app.register(eccRoutes, { prefix: '/api/v1/ecc' });
 
   // WebSocket routes
   await app.register(wsHandler, { prefix: '/ws' });

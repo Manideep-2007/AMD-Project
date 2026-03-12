@@ -1,14 +1,44 @@
 title = "NexusOps Gitleaks Configuration"
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Globally allowlisted paths.
+[extend]
+# Extend the default gitleaks rules
+useDefault = true
+
+# ── NexusOps-specific secret patterns ────────────────────────────────────────
+[[rules]]
+id = "nexusops-api-key"
+description = "NexusOps API Key"
+regex = '''nxk_[A-Za-z0-9]{32,}'''
+tags = ["key", "nexusops"]
+
+[[rules]]
+id = "nexusops-proxy-secret"
+description = "NexusOps Proxy Internal Secret"
+regex = '''PROXY_INTERNAL_SECRET\s*=\s*['"][^'"]{8,}['"]'''
+tags = ["secret", "nexusops"]
+
+[[rules]]
+id = "nexusops-jwt-secret"
+description = "NexusOps JWT Secret in config"
+regex = '''JWT_SECRET\s*=\s*['"][^'"]{8,}['"]'''
+tags = ["secret", "jwt"]
+
+[[rules]]
+id = "database-url-with-password"
+description = "Database URL with embedded password"
+regex = '''postgres(ql)?://[^:]+:[^@]+@[^/]+/[^\s'"]+'''
+tags = ["database", "password"]
+
+# ── Allowlisted paths ────────────────────────────────────────────────────────
 # .env.example files are intentional TEMPLATES — they must show the shape of
 # every required variable, so they are expected to contain realistic-looking
 # placeholder values.  They must NEVER contain real credentials.
-# ──────────────────────────────────────────────────────────────────────────────
 [allowlist]
-  description = "Allow example/template environment files"
+  description = "Allow example/template and test files"
   paths = [
     '''\.env\.example$''',
     '''env\.example$''',
+    '''(^|/)tests?/''',
+    '''(^|/)__tests__/''',
+    '''\.gitleaks\.toml$''',
   ]

@@ -300,7 +300,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/refresh', async (request, reply) => {
     const body = refreshSchema.parse(request.body);
     // Accept from body or httpOnly cookie
-    const refreshToken = body.refreshToken || (request.cookies as any)?.refresh_token;
+    const refreshToken = body.refreshToken || (request.cookies as Record<string, string | undefined>)?.refresh_token;
 
     if (!refreshToken) {
       return reply.code(400).send({
@@ -315,7 +315,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     // Verify and decode token
     try {
-      const decoded = verifyRefreshToken(refreshToken) as any;
+      const decoded = verifyRefreshToken(refreshToken) as { userId: string; workspaceId: string; role: string; type: string };
 
       // Look up by hash — we never store plaintext
       const tokenHash = hashRefreshToken(refreshToken);
@@ -395,7 +395,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/logout', async (request, reply) => {
     // Prefer reading the token from the httpOnly cookie; accept body as fallback
     // for clients that can't send cookies (e.g. server-side SDKs).
-    const cookieToken = (request.cookies as any)?.refresh_token as string | undefined;
+    const cookieToken = (request.cookies as Record<string, string | undefined>)?.refresh_token as string | undefined;
     const bodyToken = (request.body as { refreshToken?: string })?.refreshToken;
     const rawToken = cookieToken || bodyToken;
 
@@ -495,7 +495,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       const userId = request.user.userId;
 
       // Extract the current refresh token so we can exclude it
-      const currentRefreshCookie = (request as any).cookies?.refresh_token;
+      const currentRefreshCookie = (request.cookies as Record<string, string | undefined>)?.refresh_token;
       let currentTokenHash: string | null = null;
       if (currentRefreshCookie) {
         currentTokenHash = hashRefreshToken(currentRefreshCookie);
@@ -511,7 +511,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const result = await prisma.refreshToken.updateMany({
-        where: where as any,
+        where: where as Parameters<typeof prisma.refreshToken.updateMany>[0]['where'],
         data: { revokedAt: new Date() },
       });
 

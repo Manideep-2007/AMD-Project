@@ -476,3 +476,46 @@ export function useRecalculateBlastRadius() {
     },
   });
 }
+
+// ─── ECC Integration ─────────────────────────
+
+export function useECCStatus() {
+  return useQuery({
+    queryKey: ['ecc', 'status'] as const,
+    queryFn: () => apiClient.get('/ecc/status').then((r) => r.data),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useECCAgents() {
+  return useQuery({
+    queryKey: ['ecc', 'agents'] as const,
+    queryFn: () => apiClient.get('/ecc/agents').then((r) => r.data),
+  });
+}
+
+export function useECCCostSummary() {
+  return useQuery({
+    queryKey: ['ecc', 'costSummary'] as const,
+    queryFn: () => apiClient.get('/ecc/cost-summary').then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useECCInstincts() {
+  return useQuery({
+    queryKey: ['ecc', 'instincts'] as const,
+    queryFn: () => apiClient.get('/ecc/instincts').then((r) => r.data),
+  });
+}
+
+export function useECCSyncAgents() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.post('/ecc/agents/sync', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ecc', 'agents'] });
+      qc.invalidateQueries({ queryKey: ['ecc', 'status'] });
+    },
+  });
+}

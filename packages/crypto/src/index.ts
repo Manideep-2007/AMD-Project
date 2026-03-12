@@ -12,7 +12,7 @@
  *   generateKeypair()            → { publicKey, secretKey }
  */
 
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 // ---------- Native NAPI bindings (optional) ----------
 
@@ -24,11 +24,13 @@ interface NativeBindings {
 }
 
 let native: NativeBindings | null = null;
+let usingFallback = false;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('@nexusops/policy-core');
   native = mod as NativeBindings;
 } catch {
+  usingFallback = true;
   // Native Rust module not available — pure JS fallback will be used
   if (process.env.NODE_ENV === 'production') {
     console.error(
@@ -43,6 +45,14 @@ try {
       'Signatures are NOT Ed25519. Do NOT use in production.',
     );
   }
+}
+
+/**
+ * Returns true if using the pure JS fallback instead of native Rust Ed25519.
+ * Always false in production (process exits if native unavailable).
+ */
+export function isUsingFallbackCrypto(): boolean {
+  return usingFallback;
 }
 
 // ---------- Pure JS fallbacks ----------
@@ -70,8 +80,14 @@ function fallbackVerifySignature(payload: string, signature: string, publicKey: 
   // DEV ONLY: Re-compute the HMAC-SHA256 with the publicKey as a symmetric key stand-in.
   // This is NOT Ed25519 — it provides tamper detection in dev but not real asymmetric security.
   // Production MUST use the Rust native module (enforced above).
+  // Uses timing-safe comparison to prevent timing side-channel attacks.
   const expected = createHmac('sha256', publicKey).update(payload, 'utf8').digest('hex');
-  return expected === signature;
+  if (expected.length !== signature.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));
+  } catch {
+    return false;
+  }
 }
 
 function fallbackGenerateKeypair(): { publicKey: string; secretKey: string } {

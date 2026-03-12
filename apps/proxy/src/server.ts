@@ -48,6 +48,10 @@ if (!PROXY_INTERNAL_SECRET) {
   throw new Error('PROXY_INTERNAL_SECRET must be set — proxy cannot start without internal auth');
 }
 
+if (PROXY_INTERNAL_SECRET.length < 32) {
+  throw new Error('PROXY_INTERNAL_SECRET must be at least 32 characters for adequate security');
+}
+
 /**
  * buildProxyApp — creates and configures the Fastify instance without starting listen().
  * Use this in tests via app.inject(). startProxyServer() calls this then listens.

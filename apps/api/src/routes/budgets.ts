@@ -82,7 +82,7 @@ export const budgetsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', {
     onRequest: [app.authenticate],
     handler: async (request) => {
-      const { agentId } = request.query as any;
+      const { agentId } = request.query as { agentId?: string };
 
       const where: any = { workspaceId: request.workspaceId! };
       if (agentId) where.agentId = agentId;
@@ -165,7 +165,7 @@ export const budgetsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/blast-radius/:agentId', {
     onRequest: [app.authenticate],
     handler: async (request, reply) => {
-      const { agentId } = request.params as any;
+      const { agentId } = request.params as { agentId: string };
 
       try {
         const result = await calculateBlastRadius(agentId, request.workspaceId!);
@@ -174,11 +174,12 @@ export const budgetsRoutes: FastifyPluginAsync = async (app) => {
           meta: { requestId: request.id, timestamp: new Date().toISOString() },
           error: null,
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
         return reply.code(404).send({
           data: null,
           meta: { requestId: request.id, timestamp: new Date().toISOString() },
-          error: { code: 'NOT_FOUND', message: err.message },
+          error: { code: 'NOT_FOUND', message },
         });
       }
     },

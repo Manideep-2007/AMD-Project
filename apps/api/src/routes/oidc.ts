@@ -170,12 +170,12 @@ async function fetchProfile(
 // for providers where that would be visible in server access logs.
 // The frontend exchanges the OTC at POST /auth/oidc/token for the access token.
 
-let redis: { set: (...a: any[]) => any; get: (...a: any[]) => any; del: (...a: any[]) => any } | null = null;
+let redis: { set: (...a: unknown[]) => unknown; get: (...a: unknown[]) => unknown; del: (...a: unknown[]) => unknown; connect: () => Promise<void> } | null = null;
 try {
   if (process.env.REDIS_URL) {
     const Redis = require('ioredis');
     redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
-    (redis as any).connect().catch(() => { redis = null; });
+    redis!.connect().catch(() => { redis = null; });
   }
 } catch { /* Redis unavailable — fall back to in-memory */ }
 
@@ -193,7 +193,7 @@ async function storeOTC(code: string, accessToken: string): Promise<void> {
 
 async function consumeOTC(code: string): Promise<string | null> {
   if (redis) {
-    const token = await redis.get(`otc:${code}`);
+    const token = await redis.get(`otc:${code}`) as string | null;
     if (token) await redis.del(`otc:${code}`);
     return token ?? null;
   }
@@ -302,7 +302,7 @@ export const oidcRoutes: FastifyPluginAsync = async (app) => {
       // ── Upsert user & oauth_account ──────────────────────────────────────
       const user = await prisma.$transaction(async (tx) => {
         // Try to find existing oauth account first
-        const existingOAuth = await (tx as any).oAuthAccount.findUnique({
+        const existingOAuth = await (tx as Record<string, any>).oAuthAccount.findUnique({
           where: {
             provider_providerAccountId: {
               provider: providerName,
@@ -330,7 +330,7 @@ export const oidcRoutes: FastifyPluginAsync = async (app) => {
           // Create a new user (no workspace yet — prompt in FE onboarding)
           // Cast: passwordHash is nullable after migration 20260306000002; Prisma
           // client types will reflect this once `prisma generate` is re-run.
-          const created = await (tx.user.create as any)({
+          const created = await (tx.user.create as Function)({
             data: {
               email: profile.email,
               name: profile.name ?? null,
@@ -346,7 +346,7 @@ export const oidcRoutes: FastifyPluginAsync = async (app) => {
         if (!existingUser) throw new Error('User creation failed unexpectedly');
 
         // Link the oauth account
-        await (tx as any).oAuthAccount.create({
+        await (tx as Record<string, any>).oAuthAccount.create({
           data: {
             userId: existingUser.id,
             provider: providerName,

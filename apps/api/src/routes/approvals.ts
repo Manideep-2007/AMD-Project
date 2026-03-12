@@ -22,7 +22,7 @@ export const approvalsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', {
     onRequest: [app.authenticate],
     handler: async (request) => {
-      const { page = 1, limit = 50, pending } = request.query as any;
+      const { page = 1, limit = 50, pending } = request.query as { page?: number; limit?: number; pending?: string };
 
       const where: any = {
         task: {
@@ -81,7 +81,7 @@ export const approvalsRoutes: FastifyPluginAsync = async (app) => {
   app.post('/:id/decide', {
     onRequest: [app.authenticate, app.checkRole(['OWNER', 'ADMIN', 'OPERATOR'])],
     handler: async (request, reply) => {
-      const { id } = request.params as any;
+      const { id } = request.params as { id: string };
       const body = approvalDecisionSchema.parse(request.body);
 
       const approval = await prisma.taskApproval.findUnique({

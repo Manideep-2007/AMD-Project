@@ -6,6 +6,7 @@ import { appendAuditEvent, createComplianceArtifact } from '@nexusops/events';
 import { atomicBudgetDeduct, calculateAnomalyScore } from '@nexusops/blast-radius';
 import { scanText } from '@nexusops/injection';
 import type { JobData, JobType } from '@nexusops/types';
+import { eccInstinctRefresh } from './jobs/ecc-instinct-refresh';
 import { createServer } from 'http';
 
 const logger = createLogger('worker');
@@ -14,6 +15,10 @@ const PROXY_URL = process.env.PROXY_URL || 'http://localhost:3003';
 const PROXY_INTERNAL_SECRET = process.env.PROXY_INTERNAL_SECRET;
 if (!PROXY_INTERNAL_SECRET) {
   logger.error('PROXY_INTERNAL_SECRET is not set — worker cannot authenticate with proxy');
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+}
+if (PROXY_INTERNAL_SECRET && PROXY_INTERNAL_SECRET.length < 32) {
+  logger.error('PROXY_INTERNAL_SECRET must be at least 32 characters');
   if (process.env.NODE_ENV === 'production') process.exit(1);
 }
 
@@ -60,6 +65,9 @@ class AgentWorker {
     // Start approval timeout checker
     this.startApprovalTimeoutChecker();
 
+    // ECC instinct refresh — runs every 6 hours for all active workspaces
+    this.startECCInstinctScheduler();
+
     // Graceful shutdown
     const signals = ['SIGINT', 'SIGTERM'];
     signals.forEach((signal) => {
@@ -96,6 +104,9 @@ class AgentWorker {
 
       case 'update_metrics':
         return this.updateMetrics(workspaceId, payload as any);
+
+      case 'ecc_instinct_refresh':
+        return eccInstinctRefresh(workspaceId);
       
       default:
         throw new Error(`Unknown job type: ${type}`);
@@ -478,6 +489,40 @@ class AgentWorker {
     };
 
     setTimeout(check, CHECK_INTERVAL_MS);
+  }
+
+  /**
+   * ECC instinct refresh scheduler — enqueues refresh jobs for all workspaces
+   * every 6 hours. Workspaces with no ECC agents are skipped by the job itself.
+   */
+  private startECCInstinctScheduler() {
+    const INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+    const refresh = async () => {
+      if (this.isShuttingDown) return;
+
+      try {
+        const workspaces = await prisma.workspace.findMany({
+          select: { id: true },
+        });
+
+        for (const ws of workspaces) {
+          await queueManager.addJob('tasks', 'ecc_instinct_refresh', {
+            type: 'ecc_instinct_refresh' as JobType,
+            workspaceId: ws.id,
+            payload: {},
+          });
+        }
+        logger.info({ count: workspaces.length }, 'ECC instinct refresh jobs enqueued');
+      } catch (err: any) {
+        logger.error({ err: err.message }, 'ECC instinct scheduler failed');
+      }
+
+      setTimeout(refresh, INTERVAL_MS);
+    };
+
+    // First run after 5 minutes (let system stabilize)
+    setTimeout(refresh, 5 * 60 * 1000);
   }
 }
 
