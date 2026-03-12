@@ -24,7 +24,7 @@ pub struct PolicyContext {
 }
 
 /// Mirrors packages/policy/src/types.ts PolicyConditions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyConditions {
     #[serde(default)]

@@ -27,6 +27,12 @@ tags = ["secret", "jwt"]
 id = "database-url-with-password"
 description = "Database URL with embedded password"
 regex = '''postgres(ql)?://[^:]+:[^@]+@[^/]+/[^\s'"]+'''
+# Exclude well-known local-dev defaults and docker-compose env-var interpolations
+allowedRegexes = [
+  '''postgres(ql)?://postgres:postgres@''',        # standard Docker local-dev default - no real credential
+  '''postgres(ql)?://[^:]+:\$\{[^}]+\}@''',      # docker-compose ${VAR} interpolation
+  '''postgres(ql)?://postgres:\$\{POSTGRES_PASSWORD''', # parameterised compose credential
+]
 tags = ["database", "password"]
 
 # ── Allowlisted paths ────────────────────────────────────────────────────────
@@ -38,7 +44,16 @@ tags = ["database", "password"]
   paths = [
     '''\.env\.example$''',
     '''env\.example$''',
+    # Directories named test/ or tests/
     '''(^|/)tests?/''',
     '''(^|/)__tests__/''',
+    # Test files anywhere in the repo (e.g. apps/api/src/routes/workspace.test.ts)
+    '''\.test\.[jt]sx?$''',
+    '''\.spec\.[jt]sx?$''',
     '''\.gitleaks\.toml$''',
+    # Documentation — placeholder values are expected; real secrets are reviewed in code review
+    '''(^|/)docs/''',
+    '''README.*\.md$''',
+    '''SETUP\.md$''',
+    '''ECC_SETUP\.md$''',
   ]

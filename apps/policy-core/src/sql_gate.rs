@@ -87,20 +87,17 @@ fn evaluate_statement(stmt: &Statement, schema: &SafetySchema) -> SqlGateDecisio
     }
 
     // Always block dangerous DDL operations regardless of schema
-    match stmt {
-        Statement::Drop { .. } | Statement::Truncate { .. } | Statement::AlterTable { .. } => {
-            return SqlGateDecision {
-                allowed: false,
-                reason: format!(
-                    "{} operations require human approval — blocked at SQL gate level",
-                    stmt_type
-                ),
-                statement_type: Some(stmt_type),
-                affected_tables: tables,
-                blocked_columns_found: vec![],
-            };
-        }
-        _ => {}
+    if let Statement::Drop { .. } | Statement::Truncate { .. } | Statement::AlterTable { .. } = stmt {
+        return SqlGateDecision {
+            allowed: false,
+            reason: format!(
+                "{} operations require human approval — blocked at SQL gate level",
+                stmt_type
+            ),
+            statement_type: Some(stmt_type),
+            affected_tables: tables,
+            blocked_columns_found: vec![],
+        };
     }
 
     // Check table scope
@@ -165,17 +162,15 @@ fn evaluate_statement(stmt: &Statement, schema: &SafetySchema) -> SqlGateDecisio
         };
     }
 
-    // Check for WHERE 1=1 patterns if configured
-    if schema.block_where_true {
-        if contains_tautology(stmt) {
-            return SqlGateDecision {
-                allowed: false,
-                reason: "Query contains tautological WHERE clause (e.g. WHERE 1=1)".into(),
-                statement_type: Some(stmt_type),
-                affected_tables: tables,
-                blocked_columns_found: vec![],
-            };
-        }
+    // Check for WHERE 1=1 patterns if configured (collapsible_if)
+    if schema.block_where_true && contains_tautology(stmt) {
+        return SqlGateDecision {
+            allowed: false,
+            reason: "Query contains tautological WHERE clause (e.g. WHERE 1=1)".into(),
+            statement_type: Some(stmt_type),
+            affected_tables: tables,
+            blocked_columns_found: vec![],
+        };
     }
 
     SqlGateDecision {
@@ -238,11 +233,9 @@ fn extract_tables(stmt: &Statement) -> Vec<String> {
 
 fn extract_tables_from_select(select: &Select, tables: &mut Vec<String>) {
     for item in &select.from {
-        match &item.relation {
-            TableFactor::Table { name, .. } => {
-                tables.push(name.to_string());
-            }
-            _ => {}
+        // single_match → if let
+        if let TableFactor::Table { name, .. } = &item.relation {
+            tables.push(name.to_string());
         }
         for join in &item.joins {
             if let TableFactor::Table { name, .. } = &join.relation {
@@ -256,20 +249,16 @@ fn extract_tables_from_select(select: &Select, tables: &mut Vec<String>) {
 fn extract_columns(stmt: &Statement) -> Vec<String> {
     let mut columns = Vec::new();
 
-    match stmt {
-        Statement::Query(query) => {
-            if let SetExpr::Select(select) = query.body.as_ref() {
-                for item in &select.projection {
-                    match item {
-                        SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
-                            extract_column_from_expr(expr, &mut columns);
-                        }
-                        _ => {}
-                    }
+    // single_match → if let
+    if let Statement::Query(query) = stmt {
+        if let SetExpr::Select(select) = query.body.as_ref() {
+            for item in &select.projection {
+                // single_match → if let (OR patterns stable since Rust 1.53)
+                if let SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } = item {
+                    extract_column_from_expr(expr, &mut columns);
                 }
             }
         }
-        _ => {}
     }
 
     columns

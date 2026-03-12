@@ -79,7 +79,7 @@ In the NexusOps dashboard:
 Or via API:
 ```bash
 curl -X POST https://api.nexusops.dev/api/v1/ecc/agents/sync \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>"
 ```
 
 ## Integration Endpoints

@@ -414,18 +414,3 @@ mod tests {
         );
     }
 }
-
-// Default impl for PolicyConditions to make tests cleaner
-impl Default for crate::types::PolicyConditions {
-    fn default() -> Self {
-        Self {
-            tool_types: None,
-            tool_methods: None,
-            environments: None,
-            user_roles: None,
-            data_classifications: None,
-            time_window: None,
-            custom_rules: None,
-        }
-    }
-}

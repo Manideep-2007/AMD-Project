@@ -11,9 +11,9 @@ services:
     expose:
       - '5432'
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nexusops
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-nexusops}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -73,7 +73,7 @@ services:
       - '3001:3001'
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nexusops}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in .env}
@@ -121,7 +121,7 @@ services:
       - '3004:3004'
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nexusops}
       REDIS_URL: redis://redis:6379
       PROXY_INTERNAL_SECRET: ${PROXY_INTERNAL_SECRET:?PROXY_INTERNAL_SECRET must be set in .env}
       PROXY_URL: http://proxy:3003
@@ -153,7 +153,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nexusops
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nexusops}
       REDIS_URL: redis://redis:6379
       PROXY_INTERNAL_SECRET: ${PROXY_INTERNAL_SECRET:?PROXY_INTERNAL_SECRET must be set in .env}
       DB_URL_ENCRYPTION_KEY: ${DB_URL_ENCRYPTION_KEY:?DB_URL_ENCRYPTION_KEY must be set in .env}
