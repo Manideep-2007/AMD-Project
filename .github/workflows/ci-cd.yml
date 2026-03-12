@@ -8,7 +8,7 @@ on:
 
 env:
   NODE_VERSION: '20'
-  PNPM_VERSION: '9'
+  PNPM_VERSION: '8.15.0'
   # Minimum 32-char test secret that satisfies our JWT_SECRET validator
   CI_JWT_SECRET: 'ci-test-only-not-for-production-use!'
   CI_COOKIE_SECRET: 'ci-cookie-secret-not-for-production!'
