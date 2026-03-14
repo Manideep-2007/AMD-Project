@@ -8,7 +8,6 @@ on:
 
 env:
   NODE_VERSION: '20'
-  PNPM_VERSION: '9'
   # Minimum 32-char test secret that satisfies our JWT_SECRET validator
   CI_JWT_SECRET: 'ci-test-only-not-for-production-use!'
   CI_COOKIE_SECRET: 'ci-cookie-secret-not-for-production!'
@@ -29,8 +28,6 @@ jobs:
       
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       
       - name: Get pnpm store directory
         id: pnpm-cache
@@ -98,8 +95,6 @@ jobs:
       
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - name: Get pnpm store directory
         id: pnpm-cache
@@ -180,8 +175,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -258,8 +251,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - name: Get pnpm store directory
         id: pnpm-cache

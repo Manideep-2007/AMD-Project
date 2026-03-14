@@ -87,7 +87,8 @@ fn evaluate_statement(stmt: &Statement, schema: &SafetySchema) -> SqlGateDecisio
     }
 
     // Always block dangerous DDL operations regardless of schema
-    if let Statement::Drop { .. } | Statement::Truncate { .. } | Statement::AlterTable { .. } = stmt {
+    if let Statement::Drop { .. } | Statement::Truncate { .. } | Statement::AlterTable { .. } = stmt
+    {
         return SqlGateDecision {
             allowed: false,
             reason: format!(
@@ -254,7 +255,8 @@ fn extract_columns(stmt: &Statement) -> Vec<String> {
         if let SetExpr::Select(select) = query.body.as_ref() {
             for item in &select.projection {
                 // single_match → if let (OR patterns stable since Rust 1.53)
-                if let SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } = item {
+                if let SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } = item
+                {
                     extract_column_from_expr(expr, &mut columns);
                 }
             }
@@ -286,10 +288,11 @@ fn contains_tautology(stmt: &Statement) -> bool {
                 }
             }
         }
-        Statement::Update { ref selection, .. } => {
-            if let Some(sel) = selection {
-                return is_tautology(sel);
-            }
+        Statement::Update {
+            selection: Some(ref sel),
+            ..
+        } => {
+            return is_tautology(sel);
         }
         Statement::Delete(ref delete) => {
             if let Some(ref sel) = delete.selection {
